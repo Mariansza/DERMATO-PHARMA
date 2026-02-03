@@ -40,7 +40,7 @@ export default function SubmitCase() {
         const result = await uploadFile(file, 'photos');
         setPhotos(prev => [...prev, {
           url: result.file_url,
-          type: photos.length === 0 ? "Vue d'ensemble" : photos.length === 1 ? "Plan rapproche" : "Macro",
+          type: photos.length === 0 ? "Vue d'ensemble" : photos.length === 1 ? "Plan rapproché" : "Macro",
           file
         }]);
       }
@@ -179,7 +179,7 @@ export default function SubmitCase() {
       navigate(createPageUrl('CaseConfirmation') + `?ref=${reference}`);
     } catch (error) {
       console.error('Erreur soumission:', error);
-      alert('Erreur lors de la soumission. Veuillez reessayer.');
+      alert('Erreur lors de la soumission. Veuillez réessayer.');
     } finally {
       setIsSubmitting(false);
     }
@@ -228,9 +228,36 @@ export default function SubmitCase() {
     setFormData({ ...formData, [field]: updated });
   };
 
-  const handleAnswerAndNext = (field, value) => {
+  const handleAnswer = (field, value) => {
     setFormData({ ...formData, [field]: value });
-    setTimeout(() => handleNext(), 300);
+  };
+
+  // Validation helpers
+  const formatPhone = (value) => {
+    const digits = value.replace(/\D/g, '').slice(0, 10);
+    return digits.replace(/(\d{2})(?=\d)/g, '$1 ').trim();
+  };
+
+  const formatSSN = (value) => {
+    const digits = value.replace(/\D/g, '').slice(0, 15);
+    if (digits.length <= 1) return digits;
+    if (digits.length <= 3) return `${digits.slice(0, 1)} ${digits.slice(1)}`;
+    if (digits.length <= 5) return `${digits.slice(0, 1)} ${digits.slice(1, 3)} ${digits.slice(3)}`;
+    if (digits.length <= 7) return `${digits.slice(0, 1)} ${digits.slice(1, 3)} ${digits.slice(3, 5)} ${digits.slice(5)}`;
+    if (digits.length <= 10) return `${digits.slice(0, 1)} ${digits.slice(1, 3)} ${digits.slice(3, 5)} ${digits.slice(5, 7)} ${digits.slice(7)}`;
+    if (digits.length <= 13) return `${digits.slice(0, 1)} ${digits.slice(1, 3)} ${digits.slice(3, 5)} ${digits.slice(5, 7)} ${digits.slice(7, 10)} ${digits.slice(10)}`;
+    return `${digits.slice(0, 1)} ${digits.slice(1, 3)} ${digits.slice(3, 5)} ${digits.slice(5, 7)} ${digits.slice(7, 10)} ${digits.slice(10, 13)} ${digits.slice(13)}`;
+  };
+
+  const formatDate = (value) => {
+    const digits = value.replace(/\D/g, '').slice(0, 8);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+  };
+
+  const formatNumericOnly = (value, maxLength) => {
+    return value.replace(/\D/g, '').slice(0, maxLength);
   };
 
   return (
@@ -240,7 +267,7 @@ export default function SubmitCase() {
         <div className="mb-8">
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm font-medium text-gray-600">
-              Etape {currentStep + 1} sur {totalSteps}
+              Étape {currentStep + 1} sur {totalSteps}
             </span>
             <span className="text-sm font-medium" style={{ color: '#1a3d3d' }}>{Math.round(progress)}%</span>
           </div>
@@ -253,17 +280,17 @@ export default function SubmitCase() {
             <div className="space-y-6">
               <div>
                 <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Informations Pharmacien titulaire</h2>
-                <p className="text-gray-600">Vos coordonnees professionnelles</p>
+                <p className="text-gray-600">Vos coordonnées professionnelles</p>
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="first_name">Prenom *</Label>
+                  <Label htmlFor="first_name">Prénom *</Label>
                   <Input
                     id="first_name"
                     value={formData.pharmacist_first_name || ''}
                     onChange={(e) => setFormData({...formData, pharmacist_first_name: e.target.value})}
-                    placeholder="Prenom"
+                    placeholder="Prénom"
                   />
                 </div>
                 <div>
@@ -289,12 +316,13 @@ export default function SubmitCase() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="phone">Telephone *</Label>
+                  <Label htmlFor="phone">Téléphone *</Label>
                   <Input
                     id="phone"
                     value={formData.pharmacist_phone || ''}
-                    onChange={(e) => setFormData({...formData, pharmacist_phone: e.target.value})}
+                    onChange={(e) => setFormData({...formData, pharmacist_phone: formatPhone(e.target.value)})}
                     placeholder="06 12 34 56 78"
+                    maxLength={14}
                   />
                 </div>
               </div>
@@ -315,28 +343,30 @@ export default function SubmitCase() {
                   id="pharmacy_full_address"
                   value={formData.pharmacy_full_address || ''}
                   onChange={(e) => setFormData({...formData, pharmacy_full_address: e.target.value})}
-                  placeholder="12 rue de la Republique, 75001 Paris"
+                  placeholder="12 rue de la République, 75001 Paris"
                   className="min-h-20"
                 />
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="rpps">Numero RPPS (optionnel)</Label>
+                  <Label htmlFor="rpps">Numéro RPPS (optionnel)</Label>
                   <Input
                     id="rpps"
                     value={formData.rpps || ''}
-                    onChange={(e) => setFormData({...formData, rpps: e.target.value})}
+                    onChange={(e) => setFormData({...formData, rpps: formatNumericOnly(e.target.value, 11)})}
                     placeholder="10000000000"
+                    maxLength={11}
                   />
                 </div>
                 <div>
-                  <Label htmlFor="adeli">Numero ADELI / FINESS *</Label>
+                  <Label htmlFor="adeli">Numéro ADELI / FINESS *</Label>
                   <Input
                     id="adeli"
                     value={formData.adeli || ''}
-                    onChange={(e) => setFormData({...formData, adeli: e.target.value})}
+                    onChange={(e) => setFormData({...formData, adeli: formatNumericOnly(e.target.value, 9)})}
                     placeholder="750000000"
+                    maxLength={9}
                   />
                 </div>
               </div>
@@ -348,7 +378,7 @@ export default function SubmitCase() {
                   onCheckedChange={(checked) => setFormData({...formData, professional_attestation: checked})}
                 />
                 <Label htmlFor="professional" className="text-sm">
-                  J'atteste etre un professionnel de sante habilite a exercer *
+                  J'atteste être un professionnel de santé habilité à exercer *
                 </Label>
               </div>
             </div>
@@ -359,17 +389,17 @@ export default function SubmitCase() {
             <div className="space-y-6">
               <div>
                 <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Informations Patient</h2>
-                <p className="text-gray-600">Donnees minimales necessaires</p>
+                <p className="text-gray-600">Données minimales nécessaires</p>
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="patient_first_name">Prenom du patient *</Label>
+                  <Label htmlFor="patient_first_name">Prénom du patient *</Label>
                   <Input
                     id="patient_first_name"
                     value={formData.patient_first_name || ''}
                     onChange={(e) => setFormData({...formData, patient_first_name: e.target.value})}
-                    placeholder="Prenom"
+                    placeholder="Prénom"
                   />
                 </div>
                 <div>
@@ -395,12 +425,13 @@ export default function SubmitCase() {
               </div>
 
               <div>
-                <Label htmlFor="patient_ssn">Numero de securite sociale</Label>
+                <Label htmlFor="patient_ssn">Numéro de sécurité sociale</Label>
                 <Input
                   id="patient_ssn"
                   value={formData.patient_ssn || ''}
-                  onChange={(e) => setFormData({...formData, patient_ssn: e.target.value})}
+                  onChange={(e) => setFormData({...formData, patient_ssn: formatSSN(e.target.value)})}
                   placeholder="1 23 45 67 890 123 45"
+                  maxLength={21}
                 />
               </div>
 
@@ -409,8 +440,9 @@ export default function SubmitCase() {
                 <Input
                   id="birthdate"
                   value={formData.patient_birthdate || ''}
-                  onChange={(e) => setFormData({...formData, patient_birthdate: e.target.value})}
-                  placeholder="Ex: 01/01/1980"
+                  onChange={(e) => setFormData({...formData, patient_birthdate: formatDate(e.target.value)})}
+                  placeholder="JJ/MM/AAAA"
+                  maxLength={10}
                 />
               </div>
 
@@ -423,7 +455,7 @@ export default function SubmitCase() {
                   />
                   <Label htmlFor="consent" className="text-sm text-blue-900">
                     <strong>Consentement patient requis *</strong><br/>
-                    J'atteste que le patient a ete informe et a consenti au recueil et au traitement de ses donnees de sante dans le cadre de cette teleexpertise dermatologique.
+                    J'atteste que le patient a été informé et a consenti au recueil et au traitement de ses données de santé dans le cadre de cette téléexpertise dermatologique.
                   </Label>
                 </div>
               </div>
@@ -434,17 +466,17 @@ export default function SubmitCase() {
           {currentStep === 2 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Comment decririez-vous vos symptomes ?</h2>
+                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Comment décririez-vous vos symptômes ?</h2>
                 <p className="text-gray-600">Plusieurs choix possibles</p>
               </div>
 
               <div className="space-y-3">
                 {[
                   { value: 'rougeurs', label: 'Rougeurs' },
-                  { value: 'demangeaisons', label: 'Demangeaisons' },
-                  { value: 'secheresse', label: 'Secheresse' },
+                  { value: 'demangeaisons', label: 'Démangeaisons' },
+                  { value: 'secheresse', label: 'Sécheresse' },
                   { value: 'douleur', label: 'Douleur' },
-                  { value: 'boutons_lesions', label: 'Boutons / lesions / plaques' }
+                  { value: 'boutons_lesions', label: 'Boutons / lésions / plaques' }
                 ].map((option) => {
                   const isChecked = (formData.symptomes || []).includes(option.value);
                   return (
@@ -489,7 +521,7 @@ export default function SubmitCase() {
                   {(formData.symptomes || []).includes('autre') && (
                     <Input
                       className="mt-2 ml-10"
-                      placeholder="Precisez..."
+                      placeholder="Précisez..."
                       value={formData.symptomes_autre_detail || ''}
                       onChange={(e) => setFormData({...formData, symptomes_autre_detail: e.target.value})}
                     />
@@ -503,15 +535,15 @@ export default function SubmitCase() {
           {currentStep === 3 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Depuis quand ce probleme est-il present ?</h2>
+                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Depuis quand ce problème est-il présent ?</h2>
               </div>
 
-              <RadioGroup value={formData.duree_probleme} onValueChange={(value) => handleAnswerAndNext('duree_probleme', value)}>
+              <RadioGroup value={formData.duree_probleme} onValueChange={(value) => handleAnswer('duree_probleme', value)}>
                 <div className="space-y-3">
                   {[
                     { value: 'moins_semaine', label: 'Moins d\'une semaine' },
-                    { value: '1_4semaines', label: '1 a 4 semaines' },
-                    { value: '1_6mois', label: '1 a 6 mois' },
+                    { value: '1_4semaines', label: '1 à 4 semaines' },
+                    { value: '1_6mois', label: '1 à 6 mois' },
                     { value: 'plus_6mois', label: 'Plus de 6 mois' }
                   ].map((option) => {
                     const isSelected = formData.duree_probleme === option.value;
@@ -523,7 +555,7 @@ export default function SubmitCase() {
                           borderColor: isSelected ? '#1a3d3d' : '#e5e7eb',
                           backgroundColor: isSelected ? '#f0f5f0' : 'white'
                         }}
-                        onClick={() => handleAnswerAndNext('duree_probleme', option.value)}
+                        onClick={() => handleAnswer('duree_probleme', option.value)}
                       >
                         <RadioGroupItem value={option.value} id={option.value} />
                         <Label htmlFor={option.value} className="flex-1 cursor-pointer text-base">
@@ -541,7 +573,7 @@ export default function SubmitCase() {
           {currentStep === 4 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Avez-vous deja eu ce type de probleme auparavant ?</h2>
+                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Avez-vous déjà eu ce type de problème auparavant ?</h2>
               </div>
 
               <RadioGroup value={formData.recurrence} onValueChange={(value) => setFormData({...formData, recurrence: value})}>
@@ -569,7 +601,7 @@ export default function SubmitCase() {
                         {option.value === 'oui' && isSelected && (
                           <Input
                             className="mt-2 ml-10"
-                            placeholder="A quelle frequence cela revient-il ?"
+                            placeholder="À quelle fréquence cela revient-il ?"
                             value={formData.recurrence_frequence || ''}
                             onChange={(e) => setFormData({...formData, recurrence_frequence: e.target.value})}
                           />
@@ -614,7 +646,7 @@ export default function SubmitCase() {
                         {option.value === 'oui' && isSelected && (
                           <Input
                             className="mt-2 ml-10"
-                            placeholder="Precisez"
+                            placeholder="Précisez"
                             value={formData.traitement_actuel_detail || ''}
                             onChange={(e) => setFormData({...formData, traitement_actuel_detail: e.target.value})}
                           />
@@ -631,7 +663,7 @@ export default function SubmitCase() {
           {currentStep === 6 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Avez-vous recu un nouveau medicament ou une nouvelle creme prescrite dans les 3 derniers mois ?</h2>
+                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Avez-vous reçu un nouveau médicament ou une nouvelle crème prescrite dans les 3 derniers mois ?</h2>
               </div>
 
               <RadioGroup value={formData.nouveau_medicament} onValueChange={(value) => setFormData({...formData, nouveau_medicament: value})}>
@@ -659,7 +691,7 @@ export default function SubmitCase() {
                         {option.value === 'oui' && isSelected && (
                           <Input
                             className="mt-2 ml-10"
-                            placeholder="Precisez"
+                            placeholder="Précisez"
                             value={formData.nouveau_medicament_detail || ''}
                             onChange={(e) => setFormData({...formData, nouveau_medicament_detail: e.target.value})}
                           />
@@ -676,7 +708,7 @@ export default function SubmitCase() {
           {currentStep === 7 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Avez-vous des antecedents medicaux ou familiaux lies a des problemes dermatologiques ?</h2>
+                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Avez-vous des antécédents médicaux ou familiaux liés à des problèmes dermatologiques ?</h2>
               </div>
 
               <RadioGroup value={formData.antecedents_derm} onValueChange={(value) => setFormData({...formData, antecedents_derm: value})}>
@@ -705,7 +737,7 @@ export default function SubmitCase() {
                         {option.value === 'oui' && isSelected && (
                           <Input
                             className="mt-2 ml-10"
-                            placeholder="Precisez"
+                            placeholder="Précisez"
                             value={formData.antecedents_derm_detail || ''}
                             onChange={(e) => setFormData({...formData, antecedents_derm_detail: e.target.value})}
                           />
@@ -722,10 +754,10 @@ export default function SubmitCase() {
           {currentStep === 8 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Avez-vous des grains de beaute ?</h2>
+                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Avez-vous des grains de beauté ?</h2>
               </div>
 
-              <RadioGroup value={formData.grains_beaute} onValueChange={(value) => handleAnswerAndNext('grains_beaute', value)}>
+              <RadioGroup value={formData.grains_beaute} onValueChange={(value) => handleAnswer('grains_beaute', value)}>
                 <div className="space-y-3">
                   {[
                     { value: 'oui', label: 'Oui' },
@@ -740,7 +772,7 @@ export default function SubmitCase() {
                           borderColor: isSelected ? '#1a3d3d' : '#e5e7eb',
                           backgroundColor: isSelected ? '#f0f5f0' : 'white'
                         }}
-                        onClick={() => handleAnswerAndNext('grains_beaute', option.value)}
+                        onClick={() => handleAnswer('grains_beaute', option.value)}
                       >
                         <RadioGroupItem value={option.value} id={`grains-${option.value}`} />
                         <Label htmlFor={`grains-${option.value}`} className="flex-1 cursor-pointer text-base">
@@ -758,14 +790,14 @@ export default function SubmitCase() {
           {currentStep === 9 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Avez-vous remarque des changements dans un ou plusieurs de vos grains de beaute ?</h2>
-                <p className="text-gray-600">Ex. couleur, forme, taille, demangeaisons, saignements...</p>
+                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Avez-vous remarqué des changements dans un ou plusieurs de vos grains de beauté ?</h2>
+                <p className="text-gray-600">Ex. couleur, forme, taille, démangeaisons, saignements...</p>
               </div>
 
-              <RadioGroup value={formData.changements_grains} onValueChange={(value) => handleAnswerAndNext('changements_grains', value)}>
+              <RadioGroup value={formData.changements_grains} onValueChange={(value) => handleAnswer('changements_grains', value)}>
                 <div className="space-y-3">
                   {[
-                    { value: 'oui_plusieurs', label: 'Oui, plusieurs ont change' },
+                    { value: 'oui_plusieurs', label: 'Oui, plusieurs ont changé' },
                     { value: 'non', label: 'Non, aucun changement' },
                     { value: 'ne_sais_pas', label: 'Je ne sais pas' }
                   ].map((option) => {
@@ -778,7 +810,7 @@ export default function SubmitCase() {
                           borderColor: isSelected ? '#1a3d3d' : '#e5e7eb',
                           backgroundColor: isSelected ? '#f0f5f0' : 'white'
                         }}
-                        onClick={() => handleAnswerAndNext('changements_grains', option.value)}
+                        onClick={() => handleAnswer('changements_grains', option.value)}
                       >
                         <RadioGroupItem value={option.value} id={`changements-${option.value}`} />
                         <Label htmlFor={`changements-${option.value}`} className="flex-1 cursor-pointer text-base">
@@ -796,17 +828,17 @@ export default function SubmitCase() {
           {currentStep === 10 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Un de vos grains de beaute presente-t-il l'un des signes suivants ?</h2>
-                <p className="text-gray-600">Selectionnez tout ce qui s'applique</p>
+                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Un de vos grains de beauté présente-t-il l'un des signes suivants ?</h2>
+                <p className="text-gray-600">Sélectionnez tout ce qui s'applique</p>
               </div>
 
               <div className="space-y-3">
                 {[
-                  { value: 'bordures_irregulieres', label: 'Bordures irregulieres' },
+                  { value: 'bordures_irregulieres', label: 'Bordures irrégulières' },
                   { value: 'changement_couleur', label: 'Changement de couleur' },
                   { value: 'taille_augmente', label: 'Taille qui augmente' },
-                  { value: 'demangeaisons_saignements', label: 'Demangeaisons ou saignements' },
-                  { value: 'forme_asymetrique', label: 'Forme asymetrique' }
+                  { value: 'demangeaisons_saignements', label: 'Démangeaisons ou saignements' },
+                  { value: 'forme_asymetrique', label: 'Forme asymétrique' }
                 ].map((option) => {
                   const isChecked = (formData.signes_grains || []).includes(option.value);
                   return (
@@ -851,7 +883,7 @@ export default function SubmitCase() {
                   {(formData.signes_grains || []).includes('autre') && (
                     <Input
                       className="mt-2 ml-10"
-                      placeholder="Precisez..."
+                      placeholder="Précisez..."
                       value={formData.signes_grains_autre_detail || ''}
                       onChange={(e) => setFormData({...formData, signes_grains_autre_detail: e.target.value})}
                     />
@@ -865,17 +897,17 @@ export default function SubmitCase() {
           {currentStep === 11 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Ce probleme affecte-t-il votre qualite de vie ?</h2>
+                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Ce problème affecte-t-il votre qualité de vie ?</h2>
               </div>
 
-              <RadioGroup value={formData.qualite_vie} onValueChange={(value) => handleAnswerAndNext('qualite_vie', value)}>
+              <RadioGroup value={formData.qualite_vie} onValueChange={(value) => handleAnswer('qualite_vie', value)}>
                 <div className="space-y-3">
                   {[
                     { value: 'pas_du_tout', label: 'Pas du tout' },
                     { value: 'un_peu', label: 'Un peu' },
                     { value: 'moyennement', label: 'Moyennement' },
                     { value: 'beaucoup', label: 'Beaucoup' },
-                    { value: 'enormement', label: 'Enormement' }
+                    { value: 'enormement', label: 'Énormément' }
                   ].map((option) => {
                     const isSelected = formData.qualite_vie === option.value;
                     return (
@@ -886,7 +918,7 @@ export default function SubmitCase() {
                           borderColor: isSelected ? '#1a3d3d' : '#e5e7eb',
                           backgroundColor: isSelected ? '#f0f5f0' : 'white'
                         }}
-                        onClick={() => handleAnswerAndNext('qualite_vie', option.value)}
+                        onClick={() => handleAnswer('qualite_vie', option.value)}
                       >
                         <RadioGroupItem value={option.value} id={`qualite-${option.value}`} />
                         <Label htmlFor={`qualite-${option.value}`} className="flex-1 cursor-pointer text-base">
@@ -904,8 +936,8 @@ export default function SubmitCase() {
           {currentStep === 12 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Photos de la lesion</h2>
-                <p className="text-gray-600">Minimum 2 photos requises (recommande: 3 a 5)</p>
+                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Photos de la lésion</h2>
+                <p className="text-gray-600">Minimum 2 photos requises (recommandé : 3 à 5)</p>
               </div>
 
               <div className="space-y-4">
@@ -941,7 +973,7 @@ export default function SubmitCase() {
                   {isUploading ? (
                     <>
                       <Upload className="h-12 w-12 text-gray-400 mb-4 animate-pulse mx-auto" />
-                      <p className="text-gray-600">Telechargement en cours...</p>
+                      <p className="text-gray-600">Téléchargement en cours...</p>
                     </>
                   ) : (
                     <>
@@ -957,21 +989,21 @@ export default function SubmitCase() {
                 <p className="text-sm text-amber-900 font-medium mb-2">Conseils photo :</p>
                 <ul className="text-sm text-amber-800 space-y-1">
                   <li>- <strong>Vue d'ensemble</strong> : contexte large de la zone</li>
-                  <li>- <strong>Plan rapproche</strong> : lesion centree et nette</li>
-                  <li>- <strong>Macro</strong> : details texture/couleur</li>
-                  <li>- Eclairage naturel, sans flash direct</li>
-                  <li>- Eviter les ombres et les flous</li>
+                  <li>- <strong>Plan rapproché</strong> : lésion centrée et nette</li>
+                  <li>- <strong>Macro</strong> : détails texture/couleur</li>
+                  <li>- Éclairage naturel, sans flash direct</li>
+                  <li>- Éviter les ombres et les flous</li>
                 </ul>
               </div>
             </div>
           )}
 
-          {/* Step 13: Recapitulatif */}
+          {/* Step 13: Récapitulatif */}
           {currentStep === 13 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Recapitulatif</h2>
-                <p className="text-gray-600">Verifiez les informations avant soumission</p>
+                <h2 className="text-2xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Récapitulatif</h2>
+                <p className="text-gray-600">Vérifiez les informations avant soumission</p>
               </div>
 
               <div className="space-y-4">
@@ -1004,8 +1036,8 @@ export default function SubmitCase() {
                     onCheckedChange={(checked) => setFormData({...formData, consent_privacy: checked})}
                   />
                   <Label htmlFor="privacy" className="text-sm text-blue-900">
-                    <strong>Politique de confidentialite *</strong><br/>
-                    J'accepte que les donnees de sante collectees soient traitees et transmises a un dermatologue qualifie. Les donnees sont hebergees de maniere securisee et conforme HDS. Duree de conservation: 12 mois.
+                    <strong>Politique de confidentialité *</strong><br/>
+                    J'accepte que les données de santé collectées soient traitées et transmises à un dermatologue qualifié. Les données sont hébergées de manière sécurisée et conforme HDS. Durée de conservation : 12 mois.
                   </Label>
                 </div>
               </div>
@@ -1014,8 +1046,8 @@ export default function SubmitCase() {
                 <div className="flex gap-2">
                   <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm text-green-900 font-medium">Engagement delai</p>
-                    <p className="text-sm text-green-800">Vous recevrez l'avis dermatologique par email sous <strong>4 a 5 jours</strong>.</p>
+                    <p className="text-sm text-green-900 font-medium">Engagement délai</p>
+                    <p className="text-sm text-green-800">Vous recevrez l'avis dermatologique par email sous <strong>4 à 5 jours</strong>.</p>
                   </div>
                 </div>
               </div>
@@ -1030,7 +1062,7 @@ export default function SubmitCase() {
               disabled={currentStep === 0}
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Precedent
+              Précédent
             </Button>
 
             {currentStep < totalSteps - 1 ? (

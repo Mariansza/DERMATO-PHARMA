@@ -177,7 +177,6 @@ export default function SubmitCaseQuestionnaire() {
 
   const handleAnswer = (value) => {
     setAnswers({ ...answers, [questions[currentStep].id]: value });
-    setTimeout(() => handleNext(), 300);
   };
 
   const handleCheckboxChange = (questionId, value, checked) => {
@@ -369,12 +368,14 @@ export default function SubmitCaseQuestionnaire() {
               Précédent
             </Button>
 
-            {currentQuestion.type === 'photo' || currentQuestion.type === 'checkbox' ? (
-              <Button onClick={handleNext} style={{ backgroundColor: '#1a3d3d', color: 'white' }}>
-                {currentStep === totalSteps - 1 ? 'Continuer' : 'Suivant'}
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            ) : null}
+            <Button
+              onClick={handleNext}
+              disabled={!canProceed()}
+              style={{ backgroundColor: '#1a3d3d', color: 'white' }}
+            >
+              {currentStep === totalSteps - 1 ? 'Continuer' : 'Suivant'}
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Button>
           </div>
         </Card>
       </div>

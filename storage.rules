@@ -1,22 +1,23 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Photos folder - authenticated users can read/write
+    // Photos folder - anyone can upload, authenticated can read
     match /photos/{allPaths=**} {
-      allow read, write: if request.auth != null;
+      allow write: if true;  // Upload public pour soumission de dossier
+      allow read: if request.auth != null;
     }
 
-    // Prescriptions folder - authenticated users can read/write
+    // Prescriptions folder - authenticated users only
     match /prescriptions/{allPaths=**} {
       allow read, write: if request.auth != null;
     }
 
-    // Reports folder - authenticated users can read/write
+    // Reports folder - authenticated users only
     match /reports/{allPaths=**} {
       allow read, write: if request.auth != null;
     }
 
-    // Documents folder - authenticated users can read/write
+    // Documents folder - authenticated users only
     match /documents/{allPaths=**} {
       allow read, write: if request.auth != null;
     }
