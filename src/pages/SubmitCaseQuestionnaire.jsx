@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, ArrowRight, Upload, X, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { base44 } from '@/api/base44Client';
+import { uploadFile } from '@/firebase/storage';
 
 export default function SubmitCaseQuestionnaire() {
   const navigate = useNavigate();
@@ -158,7 +158,7 @@ export default function SubmitCaseQuestionnaire() {
     setIsUploading(true);
     try {
       for (const file of files) {
-        const result = await base44.integrations.Core.UploadFile({ file });
+        const result = await uploadFile(file, 'photos');
         setPhotos(prev => [...prev, {
           url: result.file_url,
           type: photos.length === 0 ? "Vue d'ensemble" : photos.length === 1 ? "Plan rapproché" : "Macro"

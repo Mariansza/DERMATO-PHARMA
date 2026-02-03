@@ -1,7 +1,14 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
-import { appParams } from '@/lib/app-params';
-import { createAxiosClient } from '@base44/sdk/dist/utils/axios-client';
+import { auth } from '@/firebase/config';
+import { getUser, updateUser, createUser } from '@/firebase/firestore';
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  updateProfile
+} from 'firebase/auth';
 
 const AuthContext = createContext();
 
@@ -9,134 +16,243 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-  const [isLoadingPublicSettings, setIsLoadingPublicSettings] = useState(true);
+  const [isLoadingPublicSettings, setIsLoadingPublicSettings] = useState(false);
   const [authError, setAuthError] = useState(null);
-  const [appPublicSettings, setAppPublicSettings] = useState(null); // Contains only { id, public_settings }
+  const [appPublicSettings, setAppPublicSettings] = useState(null);
 
   useEffect(() => {
-    checkAppState();
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        // User is signed in
+        try {
+          // Fetch additional user data from Firestore
+          const userData = await getUser(firebaseUser.uid);
+
+          setUser({
+            id: firebaseUser.uid,
+            email: firebaseUser.email,
+            emailVerified: firebaseUser.emailVerified,
+            first_name: userData?.first_name || firebaseUser.displayName?.split(' ')[0] || '',
+            last_name: userData?.last_name || firebaseUser.displayName?.split(' ').slice(1).join(' ') || '',
+            full_name: firebaseUser.displayName || userData?.full_name || '',
+            rpps: userData?.rpps || '',
+            signature: userData?.signature || '',
+            ...userData
+          });
+          setIsAuthenticated(true);
+          setAuthError(null);
+        } catch (error) {
+          console.error('Error fetching user data:', error);
+          // Still set basic auth info even if Firestore fetch fails
+          setUser({
+            id: firebaseUser.uid,
+            email: firebaseUser.email,
+            emailVerified: firebaseUser.emailVerified,
+            first_name: firebaseUser.displayName?.split(' ')[0] || '',
+            last_name: firebaseUser.displayName?.split(' ').slice(1).join(' ') || '',
+            full_name: firebaseUser.displayName || ''
+          });
+          setIsAuthenticated(true);
+        }
+      } else {
+        // User is signed out
+        setUser(null);
+        setIsAuthenticated(false);
+      }
+      setIsLoadingAuth(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  const checkAppState = async () => {
+  const login = async (email, password) => {
     try {
-      setIsLoadingPublicSettings(true);
-      setAuthError(null);
-      
-      // First, check app public settings (with token if available)
-      // This will tell us if auth is required, user not registered, etc.
-      const appClient = createAxiosClient({
-        baseURL: `${appParams.serverUrl}/api/apps/public`,
-        headers: {
-          'X-App-Id': appParams.appId
-        },
-        token: appParams.token, // Include token if available
-        interceptResponses: true
-      });
-      
-      try {
-        const publicSettings = await appClient.get(`/prod/public-settings/by-id/${appParams.appId}`);
-        setAppPublicSettings(publicSettings);
-        
-        // If we got the app public settings successfully, check if user is authenticated
-        if (appParams.token) {
-          await checkUserAuth();
-        } else {
-          setIsLoadingAuth(false);
-          setIsAuthenticated(false);
-        }
-        setIsLoadingPublicSettings(false);
-      } catch (appError) {
-        console.error('App state check failed:', appError);
-        
-        // Handle app-level errors
-        if (appError.status === 403 && appError.data?.extra_data?.reason) {
-          const reason = appError.data.extra_data.reason;
-          if (reason === 'auth_required') {
-            setAuthError({
-              type: 'auth_required',
-              message: 'Authentication required'
-            });
-          } else if (reason === 'user_not_registered') {
-            setAuthError({
-              type: 'user_not_registered',
-              message: 'User not registered for this app'
-            });
-          } else {
-            setAuthError({
-              type: reason,
-              message: appError.message
-            });
-          }
-        } else {
-          setAuthError({
-            type: 'unknown',
-            message: appError.message || 'Failed to load app'
-          });
-        }
-        setIsLoadingPublicSettings(false);
-        setIsLoadingAuth(false);
-      }
-    } catch (error) {
-      console.error('Unexpected error:', error);
-      setAuthError({
-        type: 'unknown',
-        message: error.message || 'An unexpected error occurred'
-      });
-      setIsLoadingPublicSettings(false);
-      setIsLoadingAuth(false);
-    }
-  };
-
-  const checkUserAuth = async () => {
-    try {
-      // Now check if the user is authenticated
       setIsLoadingAuth(true);
-      const currentUser = await base44.auth.me();
-      setUser(currentUser);
-      setIsAuthenticated(true);
-      setIsLoadingAuth(false);
+      setAuthError(null);
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      return result.user;
     } catch (error) {
-      console.error('User auth check failed:', error);
-      setIsLoadingAuth(false);
-      setIsAuthenticated(false);
-      
-      // If user auth fails, it might be an expired token
-      if (error.status === 401 || error.status === 403) {
-        setAuthError({
-          type: 'auth_required',
-          message: 'Authentication required'
-        });
+      console.error('Login error:', error);
+      let errorMessage = 'Erreur de connexion';
+
+      switch (error.code) {
+        case 'auth/invalid-email':
+          errorMessage = 'Adresse email invalide';
+          break;
+        case 'auth/user-disabled':
+          errorMessage = 'Ce compte a ete desactive';
+          break;
+        case 'auth/user-not-found':
+          errorMessage = 'Aucun compte associe a cette adresse email';
+          break;
+        case 'auth/wrong-password':
+          errorMessage = 'Mot de passe incorrect';
+          break;
+        case 'auth/too-many-requests':
+          errorMessage = 'Trop de tentatives. Veuillez reessayer plus tard';
+          break;
+        default:
+          errorMessage = error.message;
       }
+
+      setAuthError({
+        type: 'login_error',
+        message: errorMessage
+      });
+      throw error;
+    } finally {
+      setIsLoadingAuth(false);
     }
   };
 
-  const logout = (shouldRedirect = true) => {
-    setUser(null);
-    setIsAuthenticated(false);
-    
-    if (shouldRedirect) {
-      // Use the SDK's logout method which handles token cleanup and redirect
-      base44.auth.logout(window.location.href);
-    } else {
-      // Just remove the token without redirect
-      base44.auth.logout();
+  const register = async (email, password, additionalData = {}) => {
+    try {
+      setIsLoadingAuth(true);
+      setAuthError(null);
+
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+
+      // Update display name if provided
+      if (additionalData.first_name || additionalData.last_name) {
+        const displayName = `${additionalData.first_name || ''} ${additionalData.last_name || ''}`.trim();
+        await updateProfile(result.user, { displayName });
+      }
+
+      // Create user document in Firestore
+      await createUser(result.user.uid, {
+        email: email,
+        first_name: additionalData.first_name || '',
+        last_name: additionalData.last_name || '',
+        full_name: `${additionalData.first_name || ''} ${additionalData.last_name || ''}`.trim(),
+        rpps: additionalData.rpps || '',
+        ...additionalData
+      });
+
+      return result.user;
+    } catch (error) {
+      console.error('Registration error:', error);
+      let errorMessage = 'Erreur lors de l\'inscription';
+
+      switch (error.code) {
+        case 'auth/email-already-in-use':
+          errorMessage = 'Cette adresse email est deja utilisee';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Adresse email invalide';
+          break;
+        case 'auth/weak-password':
+          errorMessage = 'Le mot de passe doit contenir au moins 6 caracteres';
+          break;
+        default:
+          errorMessage = error.message;
+      }
+
+      setAuthError({
+        type: 'registration_error',
+        message: errorMessage
+      });
+      throw error;
+    } finally {
+      setIsLoadingAuth(false);
+    }
+  };
+
+  const logout = async (redirectUrl = null) => {
+    try {
+      await signOut(auth);
+      setUser(null);
+      setIsAuthenticated(false);
+
+      if (redirectUrl) {
+        window.location.href = redirectUrl;
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+      throw error;
+    }
+  };
+
+  const resetPassword = async (email) => {
+    try {
+      await sendPasswordResetEmail(auth, email);
+    } catch (error) {
+      console.error('Password reset error:', error);
+      let errorMessage = 'Erreur lors de la reinitialisation du mot de passe';
+
+      switch (error.code) {
+        case 'auth/invalid-email':
+          errorMessage = 'Adresse email invalide';
+          break;
+        case 'auth/user-not-found':
+          errorMessage = 'Aucun compte associe a cette adresse email';
+          break;
+        default:
+          errorMessage = error.message;
+      }
+
+      setAuthError({
+        type: 'reset_password_error',
+        message: errorMessage
+      });
+      throw error;
+    }
+  };
+
+  const updateMe = async (data) => {
+    if (!user?.id) {
+      throw new Error('No authenticated user');
+    }
+
+    try {
+      // Update Firestore user document
+      await updateUser(user.id, data);
+
+      // Update Firebase Auth profile if name changed
+      if (data.first_name || data.last_name) {
+        const displayName = `${data.first_name || user.first_name || ''} ${data.last_name || user.last_name || ''}`.trim();
+        await updateProfile(auth.currentUser, { displayName });
+      }
+
+      // Update local user state
+      setUser(prev => ({
+        ...prev,
+        ...data,
+        full_name: data.first_name || data.last_name
+          ? `${data.first_name || prev.first_name || ''} ${data.last_name || prev.last_name || ''}`.trim()
+          : prev.full_name
+      }));
+
+      return { ...user, ...data };
+    } catch (error) {
+      console.error('Update user error:', error);
+      throw error;
     }
   };
 
   const navigateToLogin = () => {
-    // Use the SDK's redirectToLogin method
-    base44.auth.redirectToLogin(window.location.href);
+    // Navigate to login page - adjust path as needed for your app
+    window.location.href = '/login';
+  };
+
+  const checkAppState = async () => {
+    // This function is kept for compatibility but simplified
+    // Firebase handles auth state automatically via onAuthStateChanged
+    setIsLoadingPublicSettings(false);
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      isAuthenticated, 
+    <AuthContext.Provider value={{
+      user,
+      isAuthenticated,
       isLoadingAuth,
       isLoadingPublicSettings,
       authError,
       appPublicSettings,
+      login,
       logout,
+      register,
+      resetPassword,
+      updateMe,
       navigateToLogin,
       checkAppState
     }}>
