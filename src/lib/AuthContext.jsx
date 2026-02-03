@@ -231,7 +231,7 @@ export const AuthProvider = ({ children }) => {
 
   const navigateToLogin = () => {
     // Navigate to login page - adjust path as needed for your app
-    window.location.href = '/login';
+    window.location.href = '/Login';
   };
 
   const checkAppState = async () => {

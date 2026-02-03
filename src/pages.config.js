@@ -51,6 +51,7 @@ import CaseConfirmation from './pages/CaseConfirmation';
 import CaseDetail from './pages/CaseDetail';
 import Dashboard from './pages/Dashboard';
 import Home from './pages/Home';
+import Login from './pages/Login';
 import SubmitCase from './pages/SubmitCase';
 import SubmitCaseQuestionnaire from './pages/SubmitCaseQuestionnaire';
 import __Layout from './Layout.jsx';
@@ -61,6 +62,7 @@ export const PAGES = {
     "CaseDetail": CaseDetail,
     "Dashboard": Dashboard,
     "Home": Home,
+    "Login": Login,
     "SubmitCase": SubmitCase,
     "SubmitCaseQuestionnaire": SubmitCaseQuestionnaire,
 }
