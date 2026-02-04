@@ -31,7 +31,7 @@ export default function SubmitCase() {
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const totalSteps = 15;
+  const totalSteps = 14;
   const progress = ((currentStep + 1) / totalSteps) * 100;
 
   // Validation du numéro de sécurité sociale (NIR)
@@ -177,6 +177,7 @@ export default function SubmitCase() {
         pharmacist_id: pharmacist.id,
         pharmacist_name: `${formData.pharmacist_first_name} ${formData.pharmacist_last_name}`,
         pharmacist_email: formData.pharmacist_email,
+        pharmacist_phone: formData.pharmacist_phone,
         pharmacy_name: formData.pharmacy_name,
         pharmacy_city: formData.pharmacy_full_address,
         patient_first_name: formData.patient_first_name,
@@ -190,7 +191,6 @@ export default function SubmitCase() {
         symptoms: Array.isArray(formData.symptomes) ? formData.symptomes.join(', ') : '',
         prior_treatments: formData.traitement_actuel === 'oui' ? (formData.traitement_actuel_detail || '') : '',
         risk_factors: formData.antecedents_derm === 'oui' ? (formData.antecedents_derm_detail || '') : '',
-        perceived_urgency: 'Moderee',
         consent_patient: formData.consent_patient,
         consent_privacy: formData.consent_privacy,
         status: "En attente",

@@ -20,7 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, User, FileText, Clock, Download, Save, Maximize2, X } from 'lucide-react';
+import { ArrowLeft, User, FileText, Clock, Download, Save, Maximize2, X, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import html2canvas from 'html2canvas';
@@ -49,6 +49,7 @@ export default function CaseDetail() {
   const [photoUrls, setPhotoUrls] = useState({});
   const [loadingPhotos, setLoadingPhotos] = useState(false);
   const [fullscreenPhoto, setFullscreenPhoto] = useState(null);
+  const [zoomLevel, setZoomLevel] = useState(1);
 
   useEffect(() => {
     if (user) {
@@ -148,8 +149,8 @@ export default function CaseDetail() {
       return;
     }
 
-    if (!prescriptionHtml || !reportHtml) {
-      alert('Veuillez générer l\'ordonnance et le compte rendu avant de conclure le dossier.');
+    if (!reportHtml) {
+      alert('Veuillez générer le compte rendu avant de conclure le dossier.');
       return;
     }
 
@@ -161,18 +162,24 @@ export default function CaseDetail() {
       });
     }
 
-    const confirmText = 'Êtes-vous sûr de vouloir conclure ce dossier ? L\'ordonnance et le compte rendu seront envoyés au patient par email.';
+    const confirmText = 'Êtes-vous sûr de vouloir conclure ce dossier ? Les documents seront envoyés au patient par email.';
     if (window.confirm(confirmText)) {
       try {
-        const prescriptionElement = document.getElementById('prescription-preview');
-        const prescriptionCanvas = await html2canvas(prescriptionElement, { scale: 2 });
-        const prescriptionImgData = prescriptionCanvas.toDataURL('image/png');
-        const prescriptionPdf = new jsPDF('p', 'mm', 'a4');
-        const prescriptionImgWidth = 210;
-        const prescriptionImgHeight = (prescriptionCanvas.height * prescriptionImgWidth) / prescriptionCanvas.width;
-        prescriptionPdf.addImage(prescriptionImgData, 'PNG', 0, 0, prescriptionImgWidth, prescriptionImgHeight);
-        const prescriptionBlob = prescriptionPdf.output('blob');
-        const prescriptionFile = new File([prescriptionBlob], `ordonnance_${caseData.public_reference}.pdf`, { type: 'application/pdf' });
+        let prescriptionUpload = null;
+
+        // Générer l'ordonnance seulement si elle existe
+        if (prescriptionHtml) {
+          const prescriptionElement = document.getElementById('prescription-preview');
+          const prescriptionCanvas = await html2canvas(prescriptionElement, { scale: 2 });
+          const prescriptionImgData = prescriptionCanvas.toDataURL('image/png');
+          const prescriptionPdf = new jsPDF('p', 'mm', 'a4');
+          const prescriptionImgWidth = 210;
+          const prescriptionImgHeight = (prescriptionCanvas.height * prescriptionImgWidth) / prescriptionCanvas.width;
+          prescriptionPdf.addImage(prescriptionImgData, 'PNG', 0, 0, prescriptionImgWidth, prescriptionImgHeight);
+          const prescriptionBlob = prescriptionPdf.output('blob');
+          const prescriptionFile = new File([prescriptionBlob], `ordonnance_${caseData.public_reference}.pdf`, { type: 'application/pdf' });
+          prescriptionUpload = await uploadFile(prescriptionFile, 'prescriptions');
+        }
 
         const reportElement = document.getElementById('report-preview');
         const reportCanvas = await html2canvas(reportElement, { scale: 2 });
@@ -183,18 +190,21 @@ export default function CaseDetail() {
         reportPdf.addImage(reportImgData, 'PNG', 0, 0, reportImgWidth, reportImgHeight);
         const reportBlob = reportPdf.output('blob');
         const reportFile = new File([reportBlob], `compte_rendu_${caseData.public_reference}.pdf`, { type: 'application/pdf' });
-
-        const prescriptionUpload = await uploadFile(prescriptionFile, 'prescriptions');
         const reportUpload = await uploadFile(reportFile, 'reports');
 
-        await updateCase(caseId, {
+        const updateData = {
           status: 'Termine',
           closed_at: new Date().toISOString(),
           assigned_derm_id: user.id,
           assigned_derm_name: user.full_name || `${user.first_name} ${user.last_name}`,
-          prescription_url: prescriptionUpload.file_url,
           report_url: reportUpload.file_url
-        });
+        };
+
+        if (prescriptionUpload) {
+          updateData.prescription_url = prescriptionUpload.file_url;
+        }
+
+        await updateCase(caseId, updateData);
 
         await createAuditLog({
           actor_type: 'derm',
@@ -213,7 +223,7 @@ export default function CaseDetail() {
           patientEmail: caseData.patient_email,
           patientName: `${caseData.patient_first_name} ${caseData.patient_last_name}`,
           reference: caseData.public_reference,
-          prescriptionUrl: prescriptionUpload.file_url,
+          prescriptionUrl: prescriptionUpload?.file_url || null,
           reportUrl: reportUpload.file_url,
           doctorName: `${doctorInfo.firstName} ${doctorInfo.lastName}`,
           pharmacyName: caseData.pharmacy_name,
@@ -512,11 +522,6 @@ export default function CaseDetail() {
                         <p><strong>Localisation:</strong> {caseData.anatomical_location}</p>
                         <p><strong>Durée:</strong> {caseData.duration || 'Non spécifiée'}</p>
                         <p><strong>Symptômes:</strong> {caseData.symptoms || 'Non spécifiés'}</p>
-                        <p><strong>Urgence perçue:</strong> <span className={
-                          (caseData.perceived_urgency === 'Élevée' || caseData.perceived_urgency === 'Elevee') ? 'text-red-600 font-semibold' :
-                          (caseData.perceived_urgency === 'Modérée' || caseData.perceived_urgency === 'Moderee') ? 'text-orange-600 font-semibold' :
-                          'text-green-600'
-                        }>{caseData.perceived_urgency === 'Moderee' ? 'Modérée' : caseData.perceived_urgency === 'Elevee' ? 'Élevée' : caseData.perceived_urgency}</span></p>
                       </div>
                     </div>
 
@@ -597,15 +602,16 @@ export default function CaseDetail() {
                       {photos.map((photo) => (
                         <div key={photo.id} className="border rounded-lg overflow-hidden">
                           {photoUrls[photo.id] ? (
-                            <div className="relative group">
-                              <img src={photoUrls[photo.id]} alt={photo.photo_type} className="w-full h-64 object-cover" />
-                              <button
-                                onClick={() => setFullscreenPhoto(photoUrls[photo.id])}
-                                className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                                title="Agrandir"
-                              >
-                                <Maximize2 className="h-5 w-5" />
-                              </button>
+                            <div
+                              className="relative group cursor-pointer"
+                              onClick={() => setFullscreenPhoto(photoUrls[photo.id])}
+                            >
+                              <img src={photoUrls[photo.id]} alt={photo.photo_type} className="w-full h-64 object-cover transition-transform group-hover:scale-105" />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                                <div className="bg-black/60 text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <ZoomIn className="h-6 w-6" />
+                                </div>
+                              </div>
                             </div>
                           ) : (
                             <div className="w-full h-64 bg-gray-100 flex items-center justify-center">
@@ -815,16 +821,16 @@ export default function CaseDetail() {
 
                       {/* Conclude Button */}
                       <div className="mt-8 pt-8 border-t">
-                        {(!prescriptionHtml || !reportHtml) && (
+                        {!reportHtml && (
                           <div className="mb-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
                             <p className="text-sm text-amber-800">
-                              Veuillez générer l'ordonnance et le compte rendu avant de conclure le dossier
+                              Veuillez générer le compte rendu avant de conclure le dossier
                             </p>
                           </div>
                         )}
                         <Button
                           onClick={handleConcludeCase}
-                          disabled={!prescriptionHtml || !reportHtml}
+                          disabled={!reportHtml}
                           className="w-full"
                           style={{ backgroundColor: '#1a3d3d', color: 'white' }}
                           size="lg"
@@ -892,21 +898,61 @@ export default function CaseDetail() {
       {fullscreenPhoto && (
         <div
           className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
-          onClick={() => setFullscreenPhoto(null)}
+          onClick={() => { setFullscreenPhoto(null); setZoomLevel(1); }}
+          onWheel={(e) => {
+            e.preventDefault();
+            if (e.deltaY < 0) {
+              setZoomLevel(prev => Math.min(prev + 0.25, 5));
+            } else {
+              setZoomLevel(prev => Math.max(prev - 0.25, 0.5));
+            }
+          }}
         >
+          {/* Bouton fermer */}
           <button
-            onClick={() => setFullscreenPhoto(null)}
-            className="absolute top-4 right-4 text-white hover:text-gray-300 p-2"
+            onClick={() => { setFullscreenPhoto(null); setZoomLevel(1); }}
+            className="absolute top-4 right-4 text-white hover:text-gray-300 p-2 z-10"
             title="Fermer"
           >
             <X className="h-8 w-8" />
           </button>
-          <img
-            src={fullscreenPhoto}
-            alt="Photo en plein écran"
-            className="max-w-full max-h-full object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
+
+          {/* Contrôles de zoom */}
+          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center gap-2 bg-black/50 rounded-lg p-2 z-10">
+            <button
+              onClick={(e) => { e.stopPropagation(); setZoomLevel(prev => Math.max(prev - 0.25, 0.5)); }}
+              className="text-white hover:text-gray-300 p-2"
+              title="Dézoomer"
+            >
+              <ZoomOut className="h-6 w-6" />
+            </button>
+            <span className="text-white text-sm min-w-[60px] text-center">{Math.round(zoomLevel * 100)}%</span>
+            <button
+              onClick={(e) => { e.stopPropagation(); setZoomLevel(prev => Math.min(prev + 0.25, 5)); }}
+              className="text-white hover:text-gray-300 p-2"
+              title="Zoomer"
+            >
+              <ZoomIn className="h-6 w-6" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); setZoomLevel(1); }}
+              className="text-white hover:text-gray-300 p-2 ml-2"
+              title="Réinitialiser"
+            >
+              <RotateCcw className="h-5 w-5" />
+            </button>
+          </div>
+
+          {/* Image avec zoom */}
+          <div className="overflow-auto max-w-full max-h-full" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={fullscreenPhoto}
+              alt="Photo en plein écran"
+              style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'center center' }}
+              className="max-w-full max-h-full object-contain transition-transform duration-200"
+              draggable={false}
+            />
+          </div>
         </div>
       )}
     </div>

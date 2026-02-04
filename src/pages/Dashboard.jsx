@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Clock, AlertCircle, Search, Filter, Users, TrendingUp, LogOut, Euro, Download } from 'lucide-react';
+import { FileText, Clock, AlertCircle, Search, Filter, Users, TrendingUp, LogOut, Download } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,7 +23,6 @@ export default function Dashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [urgencyFilter, setUrgencyFilter] = useState('all');
-  const [selectedDoctor, setSelectedDoctor] = useState('all');
 
   useEffect(() => {
     if (!isLoadingAuth && !isAuthenticated) {
@@ -50,8 +49,9 @@ export default function Dashboard() {
 
       if (!canSeeCase) return false;
 
+      const patientFullName = `${c.patient_first_name || ''} ${c.patient_last_name || ''}`.toLowerCase();
       const matchesSearch = c.public_reference?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           c.pharmacist_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           patientFullName.includes(searchTerm.toLowerCase()) ||
                            c.pharmacy_name?.toLowerCase().includes(searchTerm.toLowerCase());
 
       // Gérer les filtres avec et sans accents
@@ -89,34 +89,9 @@ export default function Dashboard() {
     return { total, enAttente, enCours, termine, slaDepasse };
   }, [cases]);
 
-  // Statistiques par médecin pour les cas terminés
-  const doctorStats = useMemo(() => {
-    const completedCases = cases.filter(c => (c.status === 'Terminé' || c.status === 'Termine') && c.assigned_derm_id && c.assigned_derm_name);
-    const stats = {};
-
-    completedCases.forEach(c => {
-      const doctorId = c.assigned_derm_id;
-      if (!stats[doctorId]) {
-        stats[doctorId] = {
-          id: doctorId,
-          name: c.assigned_derm_name,
-          count: 0,
-          cases: []
-        };
-      }
-      stats[doctorId].count++;
-      stats[doctorId].cases.push(c);
-    });
-
-    return Object.values(stats).sort((a, b) => b.count - a.count);
-  }, [cases]);
-
-  const filteredDoctorCases = useMemo(() => {
-    if (selectedDoctor === 'all') {
-      return cases.filter(c => (c.status === 'Terminé' || c.status === 'Termine') && c.assigned_derm_id);
-    }
-    return cases.filter(c => (c.status === 'Terminé' || c.status === 'Termine') && c.assigned_derm_id === selectedDoctor);
-  }, [cases, selectedDoctor]);
+  const myCases = useMemo(() => {
+    return cases.filter(c => (c.status === 'Terminé' || c.status === 'Termine') && c.assigned_derm_id === user?.id);
+  }, [cases, user]);
 
   const getStatusColor = (status) => {
     const colors = {
@@ -250,7 +225,7 @@ export default function Dashboard() {
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
               <Input
-                placeholder="Rechercher par référence, pharmacien, pharmacie..."
+                placeholder="Rechercher par référence, patient, pharmacie..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
@@ -270,31 +245,14 @@ export default function Dashboard() {
               </SelectContent>
             </Select>
 
-            <Select value={urgencyFilter} onValueChange={setUrgencyFilter}>
-              <SelectTrigger className="w-full md:w-48">
-                <AlertCircle className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="Urgence" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Toutes urgences</SelectItem>
-                <SelectItem value="Faible">Faible</SelectItem>
-                <SelectItem value="Modérée">Modérée</SelectItem>
-                <SelectItem value="Élevée">Élevée</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </Card>
 
         {/* Tabs */}
         <Tabs defaultValue="cases" className="w-full">
           <TabsList className="mb-6">
-            <TabsTrigger value="cases">Dossiers</TabsTrigger>
-            {user?.email?.endsWith('@tessan.io') && (
-              <TabsTrigger value="data">
-                <Euro className="h-4 w-4 mr-2" />
-                Données / Paiements
-              </TabsTrigger>
-            )}
+            <TabsTrigger value="cases">Tous les Dossiers</TabsTrigger>
+            <TabsTrigger value="data">Mes dossiers traités</TabsTrigger>
           </TabsList>
 
           <TabsContent value="cases">
@@ -306,9 +264,8 @@ export default function Dashboard() {
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Référence</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pharmacien</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Patient</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pharmacie</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Urgence</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statut</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">SLA</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
@@ -329,19 +286,16 @@ export default function Dashboard() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
                             <div>
-                              <p className="font-medium">{caseRecord.pharmacist_name}</p>
+                              <p className="font-medium">{caseRecord.patient_first_name} {caseRecord.patient_last_name}</p>
                             </div>
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-600">
                             <div>
                               <p>{caseRecord.pharmacy_name}</p>
-                              <p className="text-xs text-gray-500">{caseRecord.pharmacy_city}</p>
+                              {caseRecord.pharmacist_phone && (
+                                <p className="text-xs text-gray-500">{caseRecord.pharmacist_phone}</p>
+                              )}
                             </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`text-sm font-medium ${getUrgencyColor(caseRecord.perceived_urgency)}`}>
-                              {normalizeUrgency(caseRecord.perceived_urgency)}
-                            </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <Badge className={getStatusColor(caseRecord.status)}>
@@ -376,48 +330,15 @@ export default function Dashboard() {
             </Card>
           </TabsContent>
 
-          {user?.email?.endsWith('@tessan.io') && (
-            <TabsContent value="data">
-              {/* Doctor Statistics */}
-              <div className="grid md:grid-cols-3 gap-4 mb-6">
-                {doctorStats.map(doc => (
-                  <Card key={doc.id} className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-gray-600 mb-1">{doc.name}</p>
-                        <p className="text-3xl font-bold" style={{ color: '#1a3d3d' }}>{doc.count}</p>
-                        <p className="text-xs text-gray-500 mt-1">expertises terminées</p>
-                      </div>
-                      <Users className="h-10 w-10 text-gray-400" />
-                    </div>
-                  </Card>
-                ))}
+          <TabsContent value="data">
+              {/* My Cases Counter */}
+              <div className="mb-6">
+                <p className="text-sm text-gray-600">
+                  {myCases.length} expertise{myCases.length > 1 ? 's' : ''} terminée{myCases.length > 1 ? 's' : ''}
+                </p>
               </div>
 
-              {/* Filter by Doctor */}
-              <Card className="p-6 mb-6">
-                <div className="flex items-center gap-4">
-                  <Select value={selectedDoctor} onValueChange={setSelectedDoctor}>
-                    <SelectTrigger className="w-64">
-                      <Users className="h-4 w-4 mr-2" />
-                      <SelectValue placeholder="Filtrer par médecin" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Tous les médecins ({cases.filter(c => (c.status === 'Terminé' || c.status === 'Termine') && c.assigned_derm_id).length})</SelectItem>
-                      {doctorStats.map(doc => (
-                        <SelectItem key={doc.id} value={doc.id}>
-                          {doc.name} ({doc.count})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <div className="text-sm text-gray-600">
-                    {filteredDoctorCases.length} expertise{filteredDoctorCases.length > 1 ? 's' : ''} terminée{filteredDoctorCases.length > 1 ? 's' : ''}
-                  </div>
-                </div>
-              </Card>
-
-              {/* Filtered Cases Table */}
+              {/* My Cases Table */}
               <Card className="overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -425,7 +346,6 @@ export default function Dashboard() {
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Référence</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Médecin</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Patient</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Clôturé le</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Documents</th>
@@ -433,7 +353,7 @@ export default function Dashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
-                      {filteredDoctorCases.map((caseRecord) => (
+                      {myCases.map((caseRecord) => (
                         <tr key={caseRecord.id} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className="font-mono text-sm font-medium" style={{ color: '#1a3d3d' }}>
@@ -442,9 +362,6 @@ export default function Dashboard() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                             {formatDate(caseRecord.created_date)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            <p className="font-medium">{caseRecord.assigned_derm_name}</p>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
                             <p>{caseRecord.patient_first_name} {caseRecord.patient_last_name}</p>
@@ -487,15 +404,14 @@ export default function Dashboard() {
                   </table>
                 </div>
 
-                {filteredDoctorCases.length === 0 && (
+                {myCases.length === 0 && (
                   <div className="text-center py-12">
                     <FileText className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                    <p className="text-gray-600">Aucune expertise terminée trouvée</p>
+                    <p className="text-gray-600">Vous n'avez pas encore d'expertise terminée</p>
                   </div>
                 )}
               </Card>
             </TabsContent>
-          )}
         </Tabs>
       </div>
     </div>

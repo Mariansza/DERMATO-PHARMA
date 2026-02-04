@@ -22,7 +22,7 @@ exports.syncToHubspot = onRequest({ cors: true }, async (req, res) => {
 
 exports.sendEmail = onRequest({
   cors: true,
-  secrets: ['SMTP_USER', 'SMTP_PASS']
+  secrets: ['MAILGUN_API_KEY', 'MAILGUN_DOMAIN']
 }, async (req, res) => {
   try {
     const result = await sendEmail(req);

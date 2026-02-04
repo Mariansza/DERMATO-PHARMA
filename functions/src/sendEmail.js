@@ -1,15 +1,6 @@
-const nodemailer = require('nodemailer');
+const formData = require('form-data');
+const Mailgun = require('mailgun.js');
 
-/**
- * Send email via SMTP (Gmail)
- *
- * Pour configurer Gmail:
- * 1. Activer l'authentification à 2 facteurs sur votre compte Google
- * 2. Créer un mot de passe d'application: https://myaccount.google.com/apppasswords
- * 3. Configurer les secrets Firebase:
- *    firebase functions:secrets:set SMTP_USER
- *    firebase functions:secrets:set SMTP_PASS
- */
 async function sendEmail(req) {
   const { to, subject, body, from_name } = req.body;
 
@@ -17,39 +8,41 @@ async function sendEmail(req) {
     throw new Error('Missing required fields: to, subject, body');
   }
 
-  // Get SMTP config from environment variables
-  const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASS;
+  // Get Mailgun config from environment variables
+  const apiKey = process.env.MAILGUN_API_KEY;
+  const domain = process.env.MAILGUN_DOMAIN;
 
-  // Check if SMTP is configured
-  if (!smtpUser || !smtpPass) {
-    console.warn('SMTP not configured, email logged but not sent');
+  // Check if Mailgun is configured
+  if (!apiKey || !domain) {
+    console.warn('Mailgun not configured, email logged but not sent');
     console.log('Would send email to:', to);
     console.log('Subject:', subject);
-    return { success: true, message: 'Email logged (SMTP not configured)' };
+    return { success: true, message: 'Email logged (Mailgun not configured)' };
   }
 
-  // Create Gmail transporter
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: smtpUser,
-      pass: smtpPass
-    }
+  // Create Mailgun client
+  const mailgun = new Mailgun(formData);
+  const mg = mailgun.client({
+    username: 'api',
+    key: apiKey,
+    url: 'https://api.eu.mailgun.net'  // EU region
   });
 
+  // Default sender
+  const fromEmail = 'contact@tessan.io';
+  const fromAddress = from_name ? `${from_name} <${fromEmail}>` : `Tessan <${fromEmail}>`;
+
   // Send email
-  const mailOptions = {
-    from: from_name ? `"${from_name}" <${smtpUser}>` : smtpUser,
-    to,
-    subject,
+  const result = await mg.messages.create(domain, {
+    from: fromAddress,
+    to: [to],
+    subject: subject,
     html: body
-  };
+  });
 
-  await transporter.sendMail(mailOptions);
-  console.log('Email sent successfully to:', to);
+  console.log('Email sent successfully to:', to, 'Message ID:', result.id);
 
-  return { success: true, message: 'Email sent successfully' };
+  return { success: true, message: 'Email sent successfully', id: result.id };
 }
 
 module.exports = { sendEmail };

@@ -100,7 +100,7 @@ export const sendPatientConfirmation = async ({
 <p>Conservez bien cette référence pour le suivi de votre demande.</p>
 
 <p>Cordialement,<br/>
-<em>L'équipe Dermato Pharma</em></p>
+<em>L'équipe Tessan</em></p>
 </body>
 </html>
   `.trim();
@@ -109,7 +109,7 @@ export const sendPatientConfirmation = async ({
     to: patientEmail,
     subject: `Confirmation de votre demande - ${reference}`,
     body: emailBody,
-    from_name: 'Dermato Pharma'
+    from_name: 'Tessan'
   });
 };
 
@@ -146,7 +146,7 @@ export const sendPharmacistConfirmation = async ({
 <p>Vous pouvez suivre l'avancement du dossier depuis votre tableau de bord.</p>
 
 <p>Cordialement,<br/>
-<em>L'équipe Dermato Pharma</em></p>
+<em>L'équipe Tessan</em></p>
 </body>
 </html>
   `.trim();
@@ -155,7 +155,7 @@ export const sendPharmacistConfirmation = async ({
     to: pharmacistEmail,
     subject: `Dossier soumis - ${reference} - ${patientName}`,
     body: emailBody,
-    from_name: 'Dermato Pharma'
+    from_name: 'Tessan'
   });
 };
 
@@ -172,18 +172,20 @@ export const sendMedicalDocuments = async ({
   pharmacyName,
   pharmacyCity
 }) => {
+  const prescriptionSection = prescriptionUrl ? `
+<p style="margin: 20px 0;">
+<a href="${prescriptionUrl}" target="_blank" rel="noopener noreferrer" style="color: #1a3d3d; text-decoration: none; font-weight: bold;">Télécharger l'ordonnance</a>
+</p>
+` : '';
+
   const emailBody = `
 <html>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
 <p>Bonjour ${patientName},</p>
 
 <p>Votre demande de télé-expertise dermatologique (référence : <strong>${reference}</strong>) a été traitée.<br/>
-Vous trouverez ci-dessous les liens pour télécharger vos documents :</p>
-
-<p style="margin: 20px 0;">
-<a href="${prescriptionUrl}" target="_blank" rel="noopener noreferrer" style="color: #1a3d3d; text-decoration: none; font-weight: bold;">Télécharger l'ordonnance</a>
-</p>
-
+Vous trouverez ci-dessous ${prescriptionUrl ? 'les liens pour télécharger vos documents' : 'le lien pour télécharger votre document'} :</p>
+${prescriptionSection}
 <p style="margin: 20px 0;">
 <a href="${reportUrl}" target="_blank" rel="noopener noreferrer" style="color: #1a3d3d; text-decoration: none; font-weight: bold;">Télécharger le compte rendu médical</a>
 </p>
