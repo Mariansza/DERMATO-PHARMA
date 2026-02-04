@@ -43,7 +43,7 @@ export default function Dashboard() {
 
   const filteredCases = useMemo(() => {
     return cases.filter(c => {
-      // Filtrer par medecin : voir toutes les demandes non assignees OU les demandes assignees a soi
+      // Filtrer par médecin : voir toutes les demandes non assignées OU les demandes assignées à soi
       const isAssignedToMe = c.assigned_derm_id === user?.id;
       const isUnassigned = !c.assigned_derm_id || c.assigned_derm_id === '' || c.status === 'En attente';
       const canSeeCase = isUnassigned || isAssignedToMe;
@@ -53,8 +53,24 @@ export default function Dashboard() {
       const matchesSearch = c.public_reference?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            c.pharmacist_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            c.pharmacy_name?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
-      const matchesUrgency = urgencyFilter === 'all' || c.perceived_urgency === urgencyFilter;
+
+      // Gérer les filtres avec et sans accents
+      const statusVariants = {
+        'Terminé': ['Terminé', 'Termine'],
+        'En attente': ['En attente'],
+        'En cours': ['En cours']
+      };
+      const urgencyVariants = {
+        'Modérée': ['Modérée', 'Moderee'],
+        'Élevée': ['Élevée', 'Elevee'],
+        'Faible': ['Faible']
+      };
+
+      const matchesStatus = statusFilter === 'all' ||
+        (statusVariants[statusFilter] ? statusVariants[statusFilter].includes(c.status) : c.status === statusFilter);
+      const matchesUrgency = urgencyFilter === 'all' ||
+        (urgencyVariants[urgencyFilter] ? urgencyVariants[urgencyFilter].includes(c.perceived_urgency) : c.perceived_urgency === urgencyFilter);
+
       return matchesSearch && matchesStatus && matchesUrgency;
     });
   }, [cases, searchTerm, statusFilter, urgencyFilter, user]);
@@ -63,9 +79,9 @@ export default function Dashboard() {
     const total = cases.length;
     const enAttente = cases.filter(c => c.status === 'En attente').length;
     const enCours = cases.filter(c => c.status === 'En cours').length;
-    const termine = cases.filter(c => c.status === 'Termine').length;
+    const termine = cases.filter(c => c.status === 'Terminé' || c.status === 'Termine').length;
     const slaDepasse = cases.filter(c => {
-      if (!c.sla_due_at || c.status === 'Termine') return false;
+      if (!c.sla_due_at || c.status === 'Terminé' || c.status === 'Termine') return false;
       const dueDate = c.sla_due_at?.toDate ? c.sla_due_at.toDate() : new Date(c.sla_due_at);
       return dueDate < new Date();
     }).length;
@@ -73,9 +89,9 @@ export default function Dashboard() {
     return { total, enAttente, enCours, termine, slaDepasse };
   }, [cases]);
 
-  // Statistiques par medecin pour les cas termines
+  // Statistiques par médecin pour les cas terminés
   const doctorStats = useMemo(() => {
-    const completedCases = cases.filter(c => c.status === 'Termine' && c.assigned_derm_id && c.assigned_derm_name);
+    const completedCases = cases.filter(c => (c.status === 'Terminé' || c.status === 'Termine') && c.assigned_derm_id && c.assigned_derm_name);
     const stats = {};
 
     completedCases.forEach(c => {
@@ -97,15 +113,16 @@ export default function Dashboard() {
 
   const filteredDoctorCases = useMemo(() => {
     if (selectedDoctor === 'all') {
-      return cases.filter(c => c.status === 'Termine' && c.assigned_derm_id);
+      return cases.filter(c => (c.status === 'Terminé' || c.status === 'Termine') && c.assigned_derm_id);
     }
-    return cases.filter(c => c.status === 'Termine' && c.assigned_derm_id === selectedDoctor);
+    return cases.filter(c => (c.status === 'Terminé' || c.status === 'Termine') && c.assigned_derm_id === selectedDoctor);
   }, [cases, selectedDoctor]);
 
   const getStatusColor = (status) => {
     const colors = {
       'En attente': 'bg-blue-100 text-blue-800',
       'En cours': 'bg-purple-100 text-purple-800',
+      'Terminé': 'bg-green-100 text-green-800',
       'Termine': 'bg-green-100 text-green-800'
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
@@ -114,20 +131,33 @@ export default function Dashboard() {
   const getUrgencyColor = (urgency) => {
     const colors = {
       'Faible': 'text-green-600',
+      'Modérée': 'text-orange-600',
       'Moderee': 'text-orange-600',
+      'Élevée': 'text-red-600',
       'Elevee': 'text-red-600'
     };
     return colors[urgency] || 'text-gray-600';
   };
 
+  // Normaliser les valeurs pour l'affichage (ajouter les accents)
+  const normalizeStatus = (status) => {
+    const mapping = { 'Termine': 'Terminé' };
+    return mapping[status] || status;
+  };
+
+  const normalizeUrgency = (urgency) => {
+    const mapping = { 'Moderee': 'Modérée', 'Elevee': 'Élevée' };
+    return mapping[urgency] || urgency;
+  };
+
   const getSLAStatus = (caseRecord) => {
-    if (!caseRecord.sla_due_at || caseRecord.status === 'Termine') return null;
+    if (!caseRecord.sla_due_at || caseRecord.status === 'Terminé' || caseRecord.status === 'Termine') return null;
     const now = new Date();
     const due = caseRecord.sla_due_at?.toDate ? caseRecord.sla_due_at.toDate() : new Date(caseRecord.sla_due_at);
     const diff = due - now;
     const hours = Math.floor(diff / (1000 * 60 * 60));
 
-    if (hours < 0) return { text: 'Depasse', color: 'text-red-600', badge: 'bg-red-100 text-red-800' };
+    if (hours < 0) return { text: 'Dépassé', color: 'text-red-600', badge: 'bg-red-100 text-red-800' };
     if (hours < 12) return { text: `${hours}h restantes`, color: 'text-orange-600', badge: 'bg-orange-100 text-orange-800' };
     return { text: `${hours}h restantes`, color: 'text-green-600', badge: 'bg-green-100 text-green-800' };
   };
@@ -152,12 +182,12 @@ export default function Dashboard() {
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Dashboard Teleexpertise</h1>
-            <p className="text-gray-600">Gestion des dossiers dermatologiques - Connecte : {user?.full_name || user?.email}</p>
+            <h1 className="text-3xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Dashboard Téléexpertise</h1>
+            <p className="text-gray-600">Gestion des dossiers dermatologiques - Connecté : {user?.full_name || user?.email}</p>
           </div>
           <Button onClick={handleLogout} variant="outline">
             <LogOut className="h-4 w-4 mr-2" />
-            Deconnexion
+            Déconnexion
           </Button>
         </div>
 
@@ -196,7 +226,7 @@ export default function Dashboard() {
           <Card className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-1">Termines</p>
+                <p className="text-sm text-gray-600 mb-1">Terminés</p>
                 <p className="text-3xl font-bold text-green-600">{stats.termine}</p>
               </div>
               <FileText className="h-10 w-10 text-green-400" />
@@ -206,7 +236,7 @@ export default function Dashboard() {
           <Card className="p-6 bg-red-50">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-red-600 mb-1">SLA depasse</p>
+                <p className="text-sm text-red-600 mb-1">SLA dépassé</p>
                 <p className="text-3xl font-bold text-red-600">{stats.slaDepasse}</p>
               </div>
               <AlertCircle className="h-10 w-10 text-red-400" />
@@ -220,7 +250,7 @@ export default function Dashboard() {
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
               <Input
-                placeholder="Rechercher par reference, pharmacien, pharmacie..."
+                placeholder="Rechercher par référence, pharmacien, pharmacie..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
@@ -236,7 +266,7 @@ export default function Dashboard() {
                 <SelectItem value="all">Tous les statuts</SelectItem>
                 <SelectItem value="En attente">En attente</SelectItem>
                 <SelectItem value="En cours">En cours</SelectItem>
-                <SelectItem value="Termine">Termine</SelectItem>
+                <SelectItem value="Terminé">Terminé</SelectItem>
               </SelectContent>
             </Select>
 
@@ -248,8 +278,8 @@ export default function Dashboard() {
               <SelectContent>
                 <SelectItem value="all">Toutes urgences</SelectItem>
                 <SelectItem value="Faible">Faible</SelectItem>
-                <SelectItem value="Moderee">Moderee</SelectItem>
-                <SelectItem value="Elevee">Elevee</SelectItem>
+                <SelectItem value="Modérée">Modérée</SelectItem>
+                <SelectItem value="Élevée">Élevée</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -262,7 +292,7 @@ export default function Dashboard() {
             {user?.email?.endsWith('@tessan.io') && (
               <TabsTrigger value="data">
                 <Euro className="h-4 w-4 mr-2" />
-                Donnees / Paiements
+                Données / Paiements
               </TabsTrigger>
             )}
           </TabsList>
@@ -274,7 +304,7 @@ export default function Dashboard() {
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reference</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Référence</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pharmacien</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pharmacie</th>
@@ -310,12 +340,12 @@ export default function Dashboard() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`text-sm font-medium ${getUrgencyColor(caseRecord.perceived_urgency)}`}>
-                              {caseRecord.perceived_urgency}
+                              {normalizeUrgency(caseRecord.perceived_urgency)}
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <Badge className={getStatusColor(caseRecord.status)}>
-                              {caseRecord.status}
+                              {normalizeStatus(caseRecord.status)}
                             </Badge>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -340,7 +370,7 @@ export default function Dashboard() {
               {filteredCases.length === 0 && (
                 <div className="text-center py-12">
                   <FileText className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                  <p className="text-gray-600">Aucun dossier trouve</p>
+                  <p className="text-gray-600">Aucun dossier trouvé</p>
                 </div>
               )}
             </Card>
@@ -356,7 +386,7 @@ export default function Dashboard() {
                       <div>
                         <p className="text-sm text-gray-600 mb-1">{doc.name}</p>
                         <p className="text-3xl font-bold" style={{ color: '#1a3d3d' }}>{doc.count}</p>
-                        <p className="text-xs text-gray-500 mt-1">expertises terminees</p>
+                        <p className="text-xs text-gray-500 mt-1">expertises terminées</p>
                       </div>
                       <Users className="h-10 w-10 text-gray-400" />
                     </div>
@@ -370,10 +400,10 @@ export default function Dashboard() {
                   <Select value={selectedDoctor} onValueChange={setSelectedDoctor}>
                     <SelectTrigger className="w-64">
                       <Users className="h-4 w-4 mr-2" />
-                      <SelectValue placeholder="Filtrer par medecin" />
+                      <SelectValue placeholder="Filtrer par médecin" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Tous les medecins ({cases.filter(c => c.status === 'Termine' && c.assigned_derm_id).length})</SelectItem>
+                      <SelectItem value="all">Tous les médecins ({cases.filter(c => (c.status === 'Terminé' || c.status === 'Termine') && c.assigned_derm_id).length})</SelectItem>
                       {doctorStats.map(doc => (
                         <SelectItem key={doc.id} value={doc.id}>
                           {doc.name} ({doc.count})
@@ -382,7 +412,7 @@ export default function Dashboard() {
                     </SelectContent>
                   </Select>
                   <div className="text-sm text-gray-600">
-                    {filteredDoctorCases.length} expertise{filteredDoctorCases.length > 1 ? 's' : ''} terminee{filteredDoctorCases.length > 1 ? 's' : ''}
+                    {filteredDoctorCases.length} expertise{filteredDoctorCases.length > 1 ? 's' : ''} terminée{filteredDoctorCases.length > 1 ? 's' : ''}
                   </div>
                 </div>
               </Card>
@@ -393,11 +423,11 @@ export default function Dashboard() {
                   <table className="w-full">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reference</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Référence</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Medecin</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Médecin</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Patient</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cloture le</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Clôturé le</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Documents</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
                       </tr>
@@ -460,7 +490,7 @@ export default function Dashboard() {
                 {filteredDoctorCases.length === 0 && (
                   <div className="text-center py-12">
                     <FileText className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                    <p className="text-gray-600">Aucune expertise terminee trouvee</p>
+                    <p className="text-gray-600">Aucune expertise terminée trouvée</p>
                   </div>
                 )}
               </Card>

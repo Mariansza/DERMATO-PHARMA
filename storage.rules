@@ -1,10 +1,10 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Photos folder - anyone can upload, authenticated can read
+    // Photos folder - anyone can upload, only authenticated can read
     match /photos/{allPaths=**} {
-      allow write: if true;  // Upload public pour soumission de dossier
-      allow read: if request.auth != null;
+      allow write: if true;  // Upload public pour soumission
+      allow read: if request.auth != null;  // Lecture restreinte aux médecins
     }
 
     // Prescriptions folder - authenticated users only
@@ -17,9 +17,9 @@ service firebase.storage {
       allow read, write: if request.auth != null;
     }
 
-    // Documents folder - authenticated users only
-    match /documents/{allPaths=**} {
-      allow read, write: if request.auth != null;
+    // Deny all other paths by default
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
   }
 }

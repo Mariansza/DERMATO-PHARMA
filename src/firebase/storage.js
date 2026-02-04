@@ -5,15 +5,24 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
  * Upload a file to Firebase Storage
  * @param {File} file - The file to upload
  * @param {string} folder - The folder path (e.g., 'photos', 'prescriptions', 'reports')
- * @returns {Promise<{file_url: string, path: string}>}
+ * @param {boolean} skipDownloadUrl - If true, don't fetch download URL (for unauthenticated uploads)
+ * @returns {Promise<{file_url: string|null, path: string}>}
  */
-export const uploadFile = async (file, folder = 'photos') => {
+export const uploadFile = async (file, folder = 'photos', skipDownloadUrl = false) => {
   const timestamp = Date.now();
   const safeName = file.name.replace(/[^a-zA-Z0-9.]/g, '_');
   const path = `${folder}/${timestamp}_${safeName}`;
   const storageRef = ref(storage, path);
 
   const snapshot = await uploadBytes(storageRef, file);
+
+  if (skipDownloadUrl) {
+    return {
+      file_url: null,
+      path: path
+    };
+  }
+
   const url = await getDownloadURL(snapshot.ref);
 
   return {

@@ -10,7 +10,7 @@ import {
   getAuditLogsByCaseId,
   createAuditLog
 } from '@/firebase/firestore';
-import { uploadFile } from '@/firebase/storage';
+import { uploadFile, getFileUrl } from '@/firebase/storage';
 import { sendMedicalDocuments } from '@/firebase/email';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card } from "@/components/ui/card";
@@ -20,7 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, User, FileText, Clock, Download, Save } from 'lucide-react';
+import { ArrowLeft, User, FileText, Clock, Download, Save, Maximize2, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import html2canvas from 'html2canvas';
@@ -46,6 +46,9 @@ export default function CaseDetail() {
     rpps: '',
     signature: ''
   });
+  const [photoUrls, setPhotoUrls] = useState({});
+  const [loadingPhotos, setLoadingPhotos] = useState(false);
+  const [fullscreenPhoto, setFullscreenPhoto] = useState(null);
 
   useEffect(() => {
     if (user) {
@@ -71,6 +74,37 @@ export default function CaseDetail() {
     queryFn: () => getPhotosByCaseId(caseId),
     enabled: !!caseId
   });
+
+  // Récupérer les URLs des photos (médecin authentifié peut lire)
+  useEffect(() => {
+    const fetchPhotoUrls = async () => {
+      if (photos.length === 0) return;
+
+      setLoadingPhotos(true);
+      const urls = {};
+
+      for (const photo of photos) {
+        try {
+          // Anciennes données avec file_url
+          if (photo.file_url) {
+            urls[photo.id] = photo.file_url;
+          }
+          // Nouvelles données avec storage_path
+          else if (photo.storage_path) {
+            const url = await getFileUrl(photo.storage_path);
+            urls[photo.id] = url;
+          }
+        } catch (error) {
+          console.error('Erreur récupération photo:', photo.id, error);
+        }
+      }
+
+      setPhotoUrls(urls);
+      setLoadingPhotos(false);
+    };
+
+    fetchPhotoUrls();
+  }, [photos]);
 
   const { data: opinions = [] } = useQuery({
     queryKey: ['opinions', caseId],
@@ -98,7 +132,7 @@ export default function CaseDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['opinions', caseId]);
-      alert('Avis sauvegarde');
+      alert('Avis sauvegardé');
     }
   });
 
@@ -110,12 +144,12 @@ export default function CaseDetail() {
 
   const handleConcludeCase = async () => {
     if (!user) {
-      alert('Erreur: utilisateur non identifie');
+      alert('Erreur: utilisateur non identifié');
       return;
     }
 
     if (!prescriptionHtml || !reportHtml) {
-      alert('Veuillez generer l\'ordonnance et le compte rendu avant de conclure le dossier.');
+      alert('Veuillez générer l\'ordonnance et le compte rendu avant de conclure le dossier.');
       return;
     }
 
@@ -127,7 +161,7 @@ export default function CaseDetail() {
       });
     }
 
-    const confirmText = 'Etes-vous sur de vouloir conclure ce dossier ? L\'ordonnance et le compte rendu seront envoyes au patient par email.';
+    const confirmText = 'Êtes-vous sûr de vouloir conclure ce dossier ? L\'ordonnance et le compte rendu seront envoyés au patient par email.';
     if (window.confirm(confirmText)) {
       try {
         const prescriptionElement = document.getElementById('prescription-preview');
@@ -165,7 +199,7 @@ export default function CaseDetail() {
         await createAuditLog({
           actor_type: 'derm',
           actor_id: user?.id || 'unknown',
-          actor_name: user?.full_name || user?.email || 'Medecin',
+          actor_name: user?.full_name || user?.email || 'Médecin',
           case_id: caseId,
           action: 'case_concluded',
           details: 'Dossier conclu'
@@ -186,10 +220,10 @@ export default function CaseDetail() {
           pharmacyCity: caseData.pharmacy_city
         });
 
-        alert('Dossier conclu avec succes. Un email a ete envoye au patient avec les documents.');
+        alert('Dossier conclu avec succès. Un email a été envoyé au patient avec les documents.');
       } catch (error) {
         console.error('Erreur lors de la conclusion:', error);
-        alert('Erreur lors de l\'envoi de l\'email. Le dossier n\'a pas ete conclu.');
+        alert('Erreur lors de l\'envoi de l\'email. Le dossier n\'a pas été conclu.');
       }
     }
   };
@@ -203,7 +237,7 @@ export default function CaseDetail() {
 
   const handleSaveDoctorInfo = async () => {
     if (!doctorInfo.firstName || !doctorInfo.lastName || !doctorInfo.rpps) {
-      alert('Veuillez remplir tous les champs obligatoires (Prenom, Nom, RPPS)');
+      alert('Veuillez remplir tous les champs obligatoires (Prénom, Nom, RPPS)');
       return;
     }
 
@@ -215,7 +249,7 @@ export default function CaseDetail() {
         rpps: doctorInfo.rpps,
         signature: doctorInfo.signature
       });
-      alert('Vos informations ont ete sauvegardees avec succes');
+      alert('Vos informations ont été sauvegardées avec succès');
     } catch (error) {
       alert('Erreur lors de la sauvegarde: ' + error.message);
     } finally {
@@ -247,10 +281,10 @@ export default function CaseDetail() {
           <div style="flex: 1;">
             <p style="margin: 0; font-size: 14px; line-height: 1.6;">
               <strong>Dr. ${doctorInfo.firstName} ${doctorInfo.lastName}</strong><br/>
-              Specialite : Dermatologue<br/>
+              Spécialité : Dermatologue<br/>
               RPPS: ${doctorInfo.rpps}<br/>
               FINESS: 7 50 07 58 14<br/>
-              Telephone: 01 86 26 51 77<br/>
+              Téléphone: 01 86 26 51 77<br/>
               Tessan MED<br/>
               25 Rue de Ponthieu<br/>
               75008 Paris, France
@@ -275,7 +309,7 @@ export default function CaseDetail() {
         </div>
 
         <div style="margin-top: 50px; text-align: right;">
-          <p style="margin: 0; font-size: 14px;">Signature du medecin</p>
+          <p style="margin: 0; font-size: 14px;">Signature du médecin</p>
           <p style="margin: 20px 0; font-size: 24px; font-family: 'Brush Script MT', cursive; font-style: italic;">${doctorInfo.signature}</p>
           <div style="border-top: 1px solid #000; width: 200px; margin: 10px 0 0 auto;"></div>
           <p style="margin: 10px 0 0 0; font-size: 12px;">Dr. ${doctorInfo.firstName} ${doctorInfo.lastName}</p>
@@ -311,10 +345,10 @@ export default function CaseDetail() {
           <div style="flex: 1;">
             <p style="margin: 0; font-size: 14px; line-height: 1.6;">
               <strong>Dr. ${doctorInfo.firstName} ${doctorInfo.lastName}</strong><br/>
-              Specialite : Dermatologue<br/>
+              Spécialité : Dermatologue<br/>
               RPPS: ${doctorInfo.rpps}<br/>
               FINESS: 7 50 07 58 14<br/>
-              Telephone: 01 86 26 51 77<br/>
+              Téléphone: 01 86 26 51 77<br/>
               Tessan MED<br/>
               25 Rue de Ponthieu<br/>
               75008 Paris, France
@@ -344,7 +378,7 @@ export default function CaseDetail() {
         </div>
 
         <div style="margin-top: 50px; text-align: right;">
-          <p style="margin: 0; font-size: 14px;">Signature du medecin</p>
+          <p style="margin: 0; font-size: 14px;">Signature du médecin</p>
           <p style="margin: 20px 0; font-size: 24px; font-family: 'Brush Script MT', cursive; font-style: italic;">${doctorInfo.signature}</p>
           <div style="border-top: 1px solid #000; width: 200px; margin: 10px 0 0 auto;"></div>
           <p style="margin: 10px 0 0 0; font-size: 12px;">Dr. ${doctorInfo.firstName} ${doctorInfo.lastName}</p>
@@ -397,7 +431,7 @@ export default function CaseDetail() {
   const currentOpinion = opinions[0];
   const sla = caseData.sla_due_at ? (caseData.sla_due_at?.toDate ? caseData.sla_due_at.toDate() : new Date(caseData.sla_due_at)) : null;
   const now = new Date();
-  const slaExpired = sla && sla < now && caseData.status !== 'Termine';
+  const slaExpired = sla && sla < now && caseData.status !== 'Terminé' && caseData.status !== 'Termine';
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
@@ -422,14 +456,14 @@ export default function CaseDetail() {
           <div className="flex items-center gap-3">
             <Badge className={`text-lg px-4 py-2 ${
               caseData.status === 'En attente' ? 'bg-blue-100 text-blue-800' :
-              caseData.status === 'Termine' ? 'bg-green-100 text-green-800' :
+              (caseData.status === 'Terminé' || caseData.status === 'Termine') ? 'bg-green-100 text-green-800' :
               'bg-purple-100 text-purple-800'
             }`}>
-              {caseData.status}
+              {caseData.status === 'Termine' ? 'Terminé' : caseData.status}
             </Badge>
             {slaExpired && (
               <Badge className="bg-red-100 text-red-800 text-lg px-4 py-2">
-                SLA depasse
+                SLA dépassé
               </Badge>
             )}
           </div>
@@ -442,7 +476,7 @@ export default function CaseDetail() {
               <TabsList>
                 <TabsTrigger value="info">Informations</TabsTrigger>
                 <TabsTrigger value="photos">Photos ({photos.length})</TabsTrigger>
-                <TabsTrigger value="avis">Avis medical</TabsTrigger>
+                <TabsTrigger value="avis">Avis médical</TabsTrigger>
                 <TabsTrigger value="historique">Historique</TabsTrigger>
               </TabsList>
 
@@ -476,32 +510,32 @@ export default function CaseDetail() {
                       <h3 className="font-semibold mb-2">Contexte clinique</h3>
                       <div className="bg-gray-50 p-4 rounded-lg space-y-2">
                         <p><strong>Localisation:</strong> {caseData.anatomical_location}</p>
-                        <p><strong>Duree:</strong> {caseData.duration || 'Non specifiee'}</p>
-                        <p><strong>Symptomes:</strong> {caseData.symptoms || 'Non specifies'}</p>
-                        <p><strong>Urgence percue:</strong> <span className={
-                          caseData.perceived_urgency === 'Elevee' ? 'text-red-600 font-semibold' :
-                          caseData.perceived_urgency === 'Moderee' ? 'text-orange-600 font-semibold' :
+                        <p><strong>Durée:</strong> {caseData.duration || 'Non spécifiée'}</p>
+                        <p><strong>Symptômes:</strong> {caseData.symptoms || 'Non spécifiés'}</p>
+                        <p><strong>Urgence perçue:</strong> <span className={
+                          (caseData.perceived_urgency === 'Élevée' || caseData.perceived_urgency === 'Elevee') ? 'text-red-600 font-semibold' :
+                          (caseData.perceived_urgency === 'Modérée' || caseData.perceived_urgency === 'Moderee') ? 'text-orange-600 font-semibold' :
                           'text-green-600'
-                        }>{caseData.perceived_urgency}</span></p>
+                        }>{caseData.perceived_urgency === 'Moderee' ? 'Modérée' : caseData.perceived_urgency === 'Elevee' ? 'Élevée' : caseData.perceived_urgency}</span></p>
                       </div>
                     </div>
 
                     <div>
-                      <h3 className="font-semibold mb-2">Description detaillee</h3>
+                      <h3 className="font-semibold mb-2">Description détaillée</h3>
                       <div className="bg-gray-50 p-4 rounded-lg">
                         {(() => {
                           try {
                             const parsed = JSON.parse(caseData.clinical_description);
                             const labels = {
-                              symptomes: "Symptomes",
-                              duree_probleme: "Duree du probleme",
-                              recurrence: "Recurrence",
+                              symptomes: "Symptômes",
+                              duree_probleme: "Durée du problème",
+                              recurrence: "Récurrence",
                               traitement_actuel: "Traitement actuel",
-                              nouveau_medicament: "Nouveau medicament",
-                              antecedents_derm: "Antecedents dermatologiques",
-                              grains_beaute: "Grains de beaute",
-                              changements_grains: "Changements grains de beaute",
-                              qualite_vie: "Impact qualite de vie"
+                              nouveau_medicament: "Nouveau médicament",
+                              antecedents_derm: "Antécédents dermatologiques",
+                              grains_beaute: "Grains de beauté",
+                              changements_grains: "Changements grains de beauté",
+                              qualite_vie: "Impact qualité de vie"
                             };
                             return (
                               <ul className="text-sm space-y-2">
@@ -525,7 +559,7 @@ export default function CaseDetail() {
 
                     {caseData.prior_treatments && (
                       <div>
-                        <h3 className="font-semibold mb-2">Traitements anterieurs</h3>
+                        <h3 className="font-semibold mb-2">Traitements antérieurs</h3>
                         <div className="bg-gray-50 p-4 rounded-lg">
                           <p className="text-sm whitespace-pre-wrap">{caseData.prior_treatments}</p>
                         </div>
@@ -550,42 +584,64 @@ export default function CaseDetail() {
                     <h2 className="text-xl font-bold" style={{ color: '#1a3d3d' }}>Photos</h2>
                     <Button variant="outline" size="sm">
                       <Download className="h-4 w-4 mr-2" />
-                      Telecharger tout
+                      Télécharger tout
                     </Button>
                   </div>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    {photos.map((photo) => (
-                      <div key={photo.id} className="border rounded-lg overflow-hidden">
-                        <img src={photo.file_url} alt={photo.photo_type} className="w-full h-64 object-cover" />
-                        <div className="p-3 bg-gray-50">
-                          <p className="font-medium text-sm">{photo.photo_type}</p>
-                          <p className="text-xs text-gray-600">
-                            {photo.exif_stripped && 'EXIF supprimees'}
-                          </p>
+                  {loadingPhotos ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Clock className="h-8 w-8 animate-spin text-gray-400" />
+                      <span className="ml-2 text-gray-600">Chargement des photos...</span>
+                    </div>
+                  ) : (
+                    <div className="grid md:grid-cols-2 gap-4">
+                      {photos.map((photo) => (
+                        <div key={photo.id} className="border rounded-lg overflow-hidden">
+                          {photoUrls[photo.id] ? (
+                            <div className="relative group">
+                              <img src={photoUrls[photo.id]} alt={photo.photo_type} className="w-full h-64 object-cover" />
+                              <button
+                                onClick={() => setFullscreenPhoto(photoUrls[photo.id])}
+                                className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                                title="Agrandir"
+                              >
+                                <Maximize2 className="h-5 w-5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="w-full h-64 bg-gray-100 flex items-center justify-center">
+                              <span className="text-gray-400">Photo non disponible</span>
+                            </div>
+                          )}
+                          <div className="p-3 bg-gray-50">
+                            <p className="font-medium text-sm">{photo.photo_type}</p>
+                            <p className="text-xs text-gray-600">
+                              {photo.exif_stripped && 'EXIF supprimées'}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </Card>
               </TabsContent>
 
               <TabsContent value="avis">
                 <Card className="p-6">
-                  <h2 className="text-xl font-bold mb-4" style={{ color: '#1a3d3d' }}>Avis medical & Documents</h2>
+                  <h2 className="text-xl font-bold mb-4" style={{ color: '#1a3d3d' }}>Avis médical & Documents</h2>
 
                   {currentOpinion && currentOpinion.sent_to_pharmacist ? (
                     <div className="mb-4 p-4 bg-green-50 rounded-lg border border-green-200">
                       <p className="text-sm text-green-800">
-                        Avis envoye au pharmacien le {formatDate(currentOpinion.sent_at)}
+                        Avis envoyé au pharmacien le {formatDate(currentOpinion.sent_at)}
                       </p>
                     </div>
                   ) : null}
 
-                  {caseData.status === 'Termine' ? (
+                  {(caseData.status === 'Terminé' || caseData.status === 'Termine') ? (
                     <div className="space-y-6">
                       <div className="p-4 bg-green-50 rounded-lg border border-green-200">
                         <p className="text-sm text-green-800 mb-2">Dossier conclu le {caseData.closed_at ? formatDate(caseData.closed_at) : '-'}</p>
-                        <p className="text-xs text-gray-600">Medecin: {caseData.assigned_derm_name}</p>
+                        <p className="text-xs text-gray-600">Médecin: {caseData.assigned_derm_name}</p>
                       </div>
 
                       <div className="border rounded-lg p-4">
@@ -594,7 +650,7 @@ export default function CaseDetail() {
                           <a href={caseData.prescription_url} target="_blank" rel="noopener noreferrer">
                             <Button variant="outline">
                               <Download className="h-4 w-4 mr-2" />
-                              Telecharger l'ordonnance
+                              Télécharger l'ordonnance
                             </Button>
                           </a>
                         ) : (
@@ -603,12 +659,12 @@ export default function CaseDetail() {
                       </div>
 
                       <div className="border rounded-lg p-4">
-                        <h3 className="text-lg font-bold mb-3" style={{ color: '#1a3d3d' }}>Compte Rendu Medical</h3>
+                        <h3 className="text-lg font-bold mb-3" style={{ color: '#1a3d3d' }}>Compte Rendu Médical</h3>
                         {caseData.report_url ? (
                           <a href={caseData.report_url} target="_blank" rel="noopener noreferrer">
                             <Button variant="outline">
                               <Download className="h-4 w-4 mr-2" />
-                              Telecharger le compte rendu
+                              Télécharger le compte rendu
                             </Button>
                           </a>
                         ) : (
@@ -620,14 +676,14 @@ export default function CaseDetail() {
                     <>
                       {/* Doctor Info */}
                       <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                        <h3 className="font-semibold mb-3" style={{ color: '#1a3d3d' }}>Informations du medecin</h3>
+                        <h3 className="font-semibold mb-3" style={{ color: '#1a3d3d' }}>Informations du médecin</h3>
                         <div className="grid md:grid-cols-3 gap-4">
                           <div>
-                            <Label>Prenom *</Label>
+                            <Label>Prénom *</Label>
                             <Input
                               value={doctorInfo.firstName}
                               onChange={(e) => setDoctorInfo({...doctorInfo, firstName: e.target.value})}
-                              placeholder="Prenom"
+                              placeholder="Prénom"
                             />
                           </div>
                           <div>
@@ -643,7 +699,7 @@ export default function CaseDetail() {
                             <Input
                               value={doctorInfo.rpps}
                               onChange={(e) => setDoctorInfo({...doctorInfo, rpps: e.target.value})}
-                              placeholder="Numero RPPS"
+                              placeholder="Numéro RPPS"
                             />
                           </div>
                         </div>
@@ -693,18 +749,18 @@ export default function CaseDetail() {
                               style={{ backgroundColor: '#1a3d3d', color: 'white' }}
                             >
                               <FileText className="h-4 w-4 mr-2" />
-                              {isGeneratingPrescription ? 'Generation...' : 'Generer l\'ordonnance'}
+                              {isGeneratingPrescription ? 'Génération...' : 'Générer l\'ordonnance'}
                             </Button>
                             {prescriptionHtml && (
                               <Button onClick={downloadPrescriptionPdf} variant="outline">
                                 <Download className="h-4 w-4 mr-2" />
-                                Telecharger PDF
+                                Télécharger PDF
                               </Button>
                             )}
                           </div>
                           {prescriptionHtml && (
                             <div className="mt-4">
-                              <h4 className="font-semibold mb-2">Apercu de l'ordonnance</h4>
+                              <h4 className="font-semibold mb-2">Aperçu de l'ordonnance</h4>
                               <div
                                 id="prescription-preview"
                                 className="border rounded-lg p-4 bg-white shadow-sm"
@@ -717,14 +773,14 @@ export default function CaseDetail() {
 
                       {/* Report */}
                       <div className="mt-8 pt-8 border-t">
-                        <h3 className="text-lg font-bold mb-4" style={{ color: '#1a3d3d' }}>Compte Rendu Medical</h3>
+                        <h3 className="text-lg font-bold mb-4" style={{ color: '#1a3d3d' }}>Compte Rendu Médical</h3>
                         <div className="space-y-4">
                           <div>
                             <Label>Contenu du compte rendu</Label>
                             <Textarea
                               value={reportText}
                               onChange={(e) => setReportText(e.target.value)}
-                              placeholder="Saisissez le contenu du compte rendu medical..."
+                              placeholder="Saisissez le contenu du compte rendu médical..."
                               className="min-h-32"
                             />
                           </div>
@@ -735,18 +791,18 @@ export default function CaseDetail() {
                               style={{ backgroundColor: '#1a3d3d', color: 'white' }}
                             >
                               <FileText className="h-4 w-4 mr-2" />
-                              {isGeneratingReport ? 'Generation...' : 'Generer le compte rendu'}
+                              {isGeneratingReport ? 'Génération...' : 'Générer le compte rendu'}
                             </Button>
                             {reportHtml && (
                               <Button onClick={downloadReportPdf} variant="outline">
                                 <Download className="h-4 w-4 mr-2" />
-                                Telecharger PDF
+                                Télécharger PDF
                               </Button>
                             )}
                           </div>
                           {reportHtml && (
                             <div className="mt-4">
-                              <h4 className="font-semibold mb-2">Apercu du compte rendu</h4>
+                              <h4 className="font-semibold mb-2">Aperçu du compte rendu</h4>
                               <div
                                 id="report-preview"
                                 className="border rounded-lg p-4 bg-white shadow-sm"
@@ -762,7 +818,7 @@ export default function CaseDetail() {
                         {(!prescriptionHtml || !reportHtml) && (
                           <div className="mb-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
                             <p className="text-sm text-amber-800">
-                              Veuillez generer l'ordonnance et le compte rendu avant de conclure le dossier
+                              Veuillez générer l'ordonnance et le compte rendu avant de conclure le dossier
                             </p>
                           </div>
                         )}
@@ -776,7 +832,7 @@ export default function CaseDetail() {
                           Conclure et envoyer au patient
                         </Button>
                         <p className="text-xs text-gray-600 text-center mt-2">
-                          Les documents seront envoyes par email au patient
+                          Les documents seront envoyés par email au patient
                         </p>
                       </div>
                     </>
@@ -812,25 +868,47 @@ export default function CaseDetail() {
             <Card className="p-6">
               <h3 className="font-semibold mb-3 flex items-center gap-2">
                 <Clock className="h-5 w-5" />
-                SLA / Delai
+                SLA / Délai
               </h3>
               {sla ? (
                 <div>
-                  <p className="text-sm text-gray-600 mb-2">Echeance</p>
+                  <p className="text-sm text-gray-600 mb-2">Échéance</p>
                   <p className={`font-medium ${slaExpired ? 'text-red-600' : 'text-green-600'}`}>
                     {sla.toLocaleString('fr-FR')}
                   </p>
                   {slaExpired && (
-                    <p className="text-sm text-red-600 mt-2">Delai depasse</p>
+                    <p className="text-sm text-red-600 mt-2">Délai dépassé</p>
                   )}
                 </div>
               ) : (
-                <p className="text-sm text-gray-600">Aucun SLA defini</p>
+                <p className="text-sm text-gray-600">Aucun SLA défini</p>
               )}
             </Card>
           </div>
         </div>
       </div>
+
+      {/* Modal plein écran pour les photos */}
+      {fullscreenPhoto && (
+        <div
+          className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4"
+          onClick={() => setFullscreenPhoto(null)}
+        >
+          <button
+            onClick={() => setFullscreenPhoto(null)}
+            className="absolute top-4 right-4 text-white hover:text-gray-300 p-2"
+            title="Fermer"
+          >
+            <X className="h-8 w-8" />
+          </button>
+          <img
+            src={fullscreenPhoto}
+            alt="Photo en plein écran"
+            className="max-w-full max-h-full object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

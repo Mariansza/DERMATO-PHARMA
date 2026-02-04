@@ -25,9 +25,10 @@ service cloud.firestore {
       allow read, write: if request.auth != null;
     }
 
-    // Audit logs - authenticated users only
+    // Audit logs - anyone can create, authenticated can read/update
     match /auditLogs/{docId} {
-      allow read, write: if request.auth != null;
+      allow create: if true;  // Création de logs lors de soumission
+      allow read, update, delete: if request.auth != null;
     }
 
     // Users collection - users can only read/write their own data

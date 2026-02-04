@@ -7,6 +7,7 @@ import {
   getDocs,
   updateDoc,
   deleteDoc,
+  setDoc,
   query,
   where,
   orderBy,
@@ -241,10 +242,11 @@ export const getUser = async (uid) => {
 };
 
 export const updateUser = async (uid, data) => {
-  await updateDoc(doc(db, 'users', uid), {
+  // Utilise setDoc avec merge: true pour créer le document s'il n'existe pas
+  await setDoc(doc(db, 'users', uid), {
     ...data,
     updated_at: serverTimestamp()
-  });
+  }, { merge: true });
   return { id: uid, ...data };
 };
 

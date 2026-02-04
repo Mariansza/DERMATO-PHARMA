@@ -18,6 +18,10 @@ import {
   createAuditLog,
   generatePublicReference
 } from '@/firebase/firestore';
+import {
+  sendPatientConfirmation,
+  sendPharmacistConfirmation
+} from '@/firebase/email';
 
 export default function SubmitCase() {
   const navigate = useNavigate();
@@ -30,6 +34,37 @@ export default function SubmitCase() {
   const totalSteps = 15;
   const progress = ((currentStep + 1) / totalSteps) * 100;
 
+  // Validation du numéro de sécurité sociale (NIR)
+  const validateSSN = (ssn) => {
+    if (!ssn) return { valid: true, message: '', complete: false }; // Champ optionnel
+
+    const digits = ssn.replace(/\D/g, '');
+
+    // Saisie en cours - pas encore 15 chiffres
+    if (digits.length < 15) {
+      return { valid: true, message: `${digits.length}/15 chiffres`, complete: false };
+    }
+
+    // 15 chiffres saisis - on valide la clé
+    const nirBase = digits.slice(0, 13);
+    const keyProvided = parseInt(digits.slice(13, 15), 10);
+
+    // Calcul de la clé : 97 - (NIR mod 97)
+    // Utiliser BigInt pour éviter les problèmes de précision avec les grands nombres
+    const nirNumber = BigInt(nirBase);
+    const keyCalculated = 97 - Number(nirNumber % 97n);
+
+    if (keyProvided !== keyCalculated) {
+      return {
+        valid: false,
+        message: `Clé de contrôle invalide (attendue: ${keyCalculated.toString().padStart(2, '0')})`,
+        complete: true
+      };
+    }
+
+    return { valid: true, message: 'Numéro valide', complete: true };
+  };
+
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
@@ -37,9 +72,13 @@ export default function SubmitCase() {
     setIsUploading(true);
     try {
       for (const file of files) {
-        const result = await uploadFile(file, 'photos');
+        // Upload sans récupérer l'URL (pas de droit de lecture pour utilisateur non authentifié)
+        const result = await uploadFile(file, 'photos', true);
+        // Miniature locale depuis la mémoire (pas besoin de Firebase)
+        const localPreview = URL.createObjectURL(file);
         setPhotos(prev => [...prev, {
-          url: result.file_url,
+          localPreview: localPreview,  // Pour affichage miniature dans le formulaire
+          storagePath: result.path,    // Pour stockage en base (médecin récupérera l'URL)
           type: photos.length === 0 ? "Vue d'ensemble" : photos.length === 1 ? "Plan rapproché" : "Macro",
           file
         }]);
@@ -85,12 +124,15 @@ export default function SubmitCase() {
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
+    let currentOperation = '';
     try {
+      currentOperation = 'génération référence';
       const reference = generatePublicReference();
       const submittedAt = new Date().toISOString();
       const slaDueAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
 
       // Creer le pharmacien
+      currentOperation = 'création pharmacien';
       const pharmacist = await createPharmacist({
         first_name: formData.pharmacist_first_name,
         last_name: formData.pharmacist_last_name,
@@ -108,6 +150,7 @@ export default function SubmitCase() {
       });
 
       // Creer le dossier
+      currentOperation = 'création dossier';
       // Consolider toutes les reponses du questionnaire
       const questionnaireAnswers = {
         symptomes: formData.symptomes,
@@ -156,16 +199,18 @@ export default function SubmitCase() {
       });
 
       // Creer les photos
+      currentOperation = 'enregistrement photos';
       for (const photo of photos) {
         await createPhoto({
           case_id: caseRecord.id,
-          file_url: photo.url,
+          storage_path: photo.storagePath,  // Chemin Firebase Storage
           photo_type: photo.type,
           exif_stripped: true
         });
       }
 
       // Log audit
+      currentOperation = 'création log audit';
       await createAuditLog({
         actor_type: "pharmacist",
         actor_id: pharmacist.id,
@@ -175,11 +220,35 @@ export default function SubmitCase() {
         details: `Nouveau dossier soumis: ${reference}`
       });
 
+      // Envoyer les emails de confirmation
+      try {
+        // Email au patient
+        await sendPatientConfirmation({
+          patientEmail: formData.patient_email,
+          patientName: `${formData.patient_first_name} ${formData.patient_last_name}`,
+          reference: reference,
+          pharmacyName: formData.pharmacy_name
+        });
+
+        // Email au pharmacien
+        await sendPharmacistConfirmation({
+          pharmacistEmail: formData.pharmacist_email,
+          pharmacistName: `${formData.pharmacist_first_name} ${formData.pharmacist_last_name}`,
+          patientName: `${formData.patient_first_name} ${formData.patient_last_name}`,
+          reference: reference,
+          pharmacyName: formData.pharmacy_name
+        });
+      } catch (emailError) {
+        // Ne pas bloquer la soumission si l'email échoue
+        console.error('Erreur envoi email:', emailError);
+      }
+
       // Rediriger vers confirmation
       navigate(createPageUrl('CaseConfirmation') + `?ref=${reference}`);
     } catch (error) {
       console.error('Erreur soumission:', error);
-      alert('Erreur lors de la soumission. Veuillez réessayer.');
+      console.error('Opération échouée:', currentOperation);
+      alert(`Erreur lors de la soumission (${currentOperation}). ${error.message || 'Veuillez réessayer.'}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -193,7 +262,9 @@ export default function SubmitCase() {
              formData.adeli && formData.professional_attestation;
     }
     if (currentStep === 1) {
-      return formData.patient_first_name && formData.patient_last_name && formData.patient_email && formData.consent_patient;
+      const ssnResult = validateSSN(formData.patient_ssn);
+      const ssnIsValid = !ssnResult.complete || ssnResult.valid; // OK si pas complet ou si complet et valide
+      return formData.patient_first_name && formData.patient_last_name && formData.patient_email && formData.consent_patient && ssnIsValid;
     }
     // Questionnaire steps 2-12
     if (currentStep === 2) return formData.symptomes?.length > 0;
@@ -259,6 +330,8 @@ export default function SubmitCase() {
   const formatNumericOnly = (value, maxLength) => {
     return value.replace(/\D/g, '').slice(0, maxLength);
   };
+
+  const ssnValidation = validateSSN(formData.patient_ssn);
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
@@ -432,7 +505,20 @@ export default function SubmitCase() {
                   onChange={(e) => setFormData({...formData, patient_ssn: formatSSN(e.target.value)})}
                   placeholder="1 23 45 67 890 123 45"
                   maxLength={21}
+                  className={ssnValidation.complete
+                    ? (ssnValidation.valid ? 'border-green-500' : 'border-red-500')
+                    : ''
+                  }
                 />
+                {formData.patient_ssn && formData.patient_ssn.replace(/\D/g, '').length > 0 && (
+                  <p className={`text-xs mt-1 ${
+                    ssnValidation.complete
+                      ? (ssnValidation.valid ? 'text-green-600' : 'text-red-600')
+                      : 'text-gray-500'
+                  }`}>
+                    {ssnValidation.message}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -943,7 +1029,7 @@ export default function SubmitCase() {
               <div className="space-y-4">
                 {photos.map((photo, index) => (
                   <div key={index} className="relative border rounded-lg p-4 flex items-center gap-4">
-                    <img src={photo.url} alt={`Photo ${index + 1}`} className="w-24 h-24 object-cover rounded" />
+                    <img src={photo.localPreview} alt={`Photo ${index + 1}`} className="w-24 h-24 object-cover rounded" />
                     <div className="flex-1">
                       <p className="font-medium">{photo.type}</p>
                       <p className="text-sm text-gray-600">Photo {index + 1}</p>
@@ -959,34 +1045,58 @@ export default function SubmitCase() {
                 ))}
               </div>
 
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/heic"
-                  multiple
-                  onChange={handleFileUpload}
-                  className="hidden"
-                  id="photo-upload"
-                  disabled={isUploading}
-                />
-                <label htmlFor="photo-upload" className="cursor-pointer">
-                  {isUploading ? (
-                    <>
-                      <Upload className="h-12 w-12 text-gray-400 mb-4 animate-pulse mx-auto" />
-                      <p className="text-gray-600">Téléchargement en cours...</p>
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-12 w-12 text-gray-400 mb-4 mx-auto" />
-                      <p className="text-gray-900 font-medium mb-2">Cliquez pour ajouter des photos</p>
-                      <p className="text-sm text-gray-500">JPG, PNG, HEIC - Max 15MB par photo</p>
-                    </>
-                  )}
-                </label>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                {/* Bouton Prendre une photo */}
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    id="photo-capture"
+                    disabled={isUploading}
+                  />
+                  <label htmlFor="photo-capture" className="cursor-pointer block">
+                    <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-3">
+                      <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </div>
+                    <p className="text-gray-900 font-medium text-sm">Prendre une photo</p>
+                  </label>
+                </div>
+
+                {/* Bouton Choisir depuis galerie */}
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/heic"
+                    multiple
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    id="photo-upload"
+                    disabled={isUploading}
+                  />
+                  <label htmlFor="photo-upload" className="cursor-pointer block">
+                    <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-3">
+                      <Upload className="h-6 w-6 text-blue-600" />
+                    </div>
+                    <p className="text-gray-900 font-medium text-sm">Galerie photo</p>
+                  </label>
+                </div>
               </div>
 
+              {isUploading && (
+                <div className="text-center py-4">
+                  <Upload className="h-8 w-8 text-gray-400 mb-2 animate-pulse mx-auto" />
+                  <p className="text-gray-600">Téléchargement en cours...</p>
+                </div>
+              )}
+
               <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
-                <p className="text-sm text-amber-900 font-medium mb-2">Conseils photo :</p>
+                <p className="text-sm text-amber-900 font-medium mb-2">Conseils photo dans l'ordre suivant :</p>
                 <ul className="text-sm text-amber-800 space-y-1">
                   <li>- <strong>Vue d'ensemble</strong> : contexte large de la zone</li>
                   <li>- <strong>Plan rapproché</strong> : lésion centrée et nette</li>
