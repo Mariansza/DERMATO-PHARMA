@@ -35,5 +35,12 @@ service cloud.firestore {
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
+
+    // Questionnaire responses collection - patient triage B2C
+    match /questionnaire_responses/{document} {
+      allow create: if true;           // Soumissions anonymes patients
+      allow read: if request.auth != null;  // Lecture authentifiée (médecins)
+      allow update, delete: if false;  // Immutable
+    }
   }
 }

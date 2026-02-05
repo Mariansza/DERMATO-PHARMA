@@ -251,6 +251,36 @@ export const updateUser = async (uid, data) => {
 };
 
 // ============================================================================
+// QUESTIONNAIRE RESPONSES COLLECTION (Patient Triage B2C)
+// ============================================================================
+
+export const createQuestionnaireResponse = async (data) => {
+  const docRef = await addDoc(collection(db, 'questionnaire_responses'), {
+    ...data,
+    created_at: serverTimestamp()
+  });
+  return { id: docRef.id, ...data };
+};
+
+export const listQuestionnaireResponses = async (sortField = 'created_at', sortOrder = 'desc', limitCount = 100) => {
+  const q = query(
+    collection(db, 'questionnaire_responses'),
+    orderBy(sortField, sortOrder),
+    limit(limitCount)
+  );
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+};
+
+export const getQuestionnaireResponse = async (id) => {
+  const docSnap = await getDoc(doc(db, 'questionnaire_responses', id));
+  if (docSnap.exists()) {
+    return { id: docSnap.id, ...docSnap.data() };
+  }
+  return null;
+};
+
+// ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
 

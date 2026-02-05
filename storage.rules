@@ -17,6 +17,13 @@ service firebase.storage {
       allow read, write: if request.auth != null;
     }
 
+    // Questionnaire photos - patient triage B2C
+    match /questionnaire-photos/{imageId} {
+      allow write: if request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+      allow read: if request.auth != null;
+    }
+
     // Deny all other paths by default
     match /{allPaths=**} {
       allow read, write: if false;

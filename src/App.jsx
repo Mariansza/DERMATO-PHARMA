@@ -10,6 +10,13 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 
+// Patient B2C pages
+import PatientHome from './pages/patient/PatientHome';
+import PatientQuestionnaire from './pages/patient/PatientQuestionnaire';
+import PatientEmailCollection from './pages/patient/PatientEmailCollection';
+import PatientResultUrgent from './pages/patient/PatientResultUrgent';
+import PatientResultStandard from './pages/patient/PatientResultStandard';
+
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
@@ -44,6 +51,14 @@ const AuthenticatedApp = () => {
   // Render the main app
   return (
     <Routes>
+      {/* Patient B2C routes (public, no layout) */}
+      <Route path="/patient" element={<PatientHome />} />
+      <Route path="/patient/questionnaire" element={<PatientQuestionnaire />} />
+      <Route path="/patient/email-collection" element={<PatientEmailCollection />} />
+      <Route path="/patient/resultat-urgent" element={<PatientResultUrgent />} />
+      <Route path="/patient/resultat-standard" element={<PatientResultStandard />} />
+
+      {/* Main app routes */}
       <Route path="/" element={
         <LayoutWrapper currentPageName={mainPageKey}>
           <MainPage />
