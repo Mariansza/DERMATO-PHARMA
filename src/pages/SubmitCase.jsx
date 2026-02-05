@@ -129,7 +129,7 @@ export default function SubmitCase() {
       currentOperation = 'génération référence';
       const reference = generatePublicReference();
       const submittedAt = new Date().toISOString();
-      const slaDueAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+      const slaDueAt = new Date(Date.now() + 120 * 60 * 60 * 1000).toISOString();
 
       // Creer le pharmacien
       currentOperation = 'création pharmacien';
