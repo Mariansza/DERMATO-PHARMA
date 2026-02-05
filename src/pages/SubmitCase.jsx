@@ -79,7 +79,7 @@ export default function SubmitCase() {
         setPhotos(prev => [...prev, {
           localPreview: localPreview,  // Pour affichage miniature dans le formulaire
           storagePath: result.path,    // Pour stockage en base (médecin récupérera l'URL)
-          type: photos.length === 0 ? "Vue d'ensemble" : photos.length === 1 ? "Plan rapproché" : "Macro",
+          type: prev.length === 0 ? "Vue d'ensemble" : prev.length === 1 ? "Plan rapproché" : "Macro",
           file
         }]);
       }
@@ -568,41 +568,37 @@ export default function SubmitCase() {
                   return (
                     <div
                       key={option.value}
-                      className="flex items-center space-x-3 p-4 rounded-lg border-2 transition-all cursor-pointer"
+                      className="flex items-center space-x-3 p-4 rounded-lg border-2 transition-all cursor-pointer select-none"
                       style={{
                         borderColor: isChecked ? '#1a3d3d' : '#e5e7eb',
                         backgroundColor: isChecked ? '#f0f5f0' : 'white'
                       }}
                       onClick={() => handleCheckboxChange('symptomes', option.value, !isChecked)}
                     >
-                      <Checkbox
-                        checked={isChecked}
-                        onCheckedChange={(checked) => handleCheckboxChange('symptomes', option.value, checked)}
-                        id={option.value}
-                      />
-                      <Label htmlFor={option.value} className="flex-1 cursor-pointer text-base">
+                      <div className={`h-4 w-4 rounded border-2 flex items-center justify-center ${isChecked ? 'bg-[#1a3d3d] border-[#1a3d3d]' : 'border-gray-300 bg-white'}`}>
+                        {isChecked && <CheckCircle className="h-3 w-3 text-white" />}
+                      </div>
+                      <span className="flex-1 text-base">
                         {option.label}
-                      </Label>
+                      </span>
                     </div>
                   );
                 })}
                 <div>
                   <div
-                    className="flex items-center space-x-3 p-4 rounded-lg border-2 transition-all cursor-pointer"
+                    className="flex items-center space-x-3 p-4 rounded-lg border-2 transition-all cursor-pointer select-none"
                     style={{
                       borderColor: (formData.symptomes || []).includes('autre') ? '#1a3d3d' : '#e5e7eb',
                       backgroundColor: (formData.symptomes || []).includes('autre') ? '#f0f5f0' : 'white'
                     }}
                     onClick={() => handleCheckboxChange('symptomes', 'autre', !(formData.symptomes || []).includes('autre'))}
                   >
-                    <Checkbox
-                      checked={(formData.symptomes || []).includes('autre')}
-                      onCheckedChange={(checked) => handleCheckboxChange('symptomes', 'autre', checked)}
-                      id="symptome-autre"
-                    />
-                    <Label htmlFor="symptome-autre" className="flex-1 cursor-pointer text-base">
+                    <div className={`h-4 w-4 rounded border-2 flex items-center justify-center ${(formData.symptomes || []).includes('autre') ? 'bg-[#1a3d3d] border-[#1a3d3d]' : 'border-gray-300 bg-white'}`}>
+                      {(formData.symptomes || []).includes('autre') && <CheckCircle className="h-3 w-3 text-white" />}
+                    </div>
+                    <span className="flex-1 text-base">
                       Autre
-                    </Label>
+                    </span>
                   </div>
                   {(formData.symptomes || []).includes('autre') && (
                     <Input

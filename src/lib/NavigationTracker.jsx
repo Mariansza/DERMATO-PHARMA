@@ -1,8 +1,6 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
-import { analytics } from '@/firebase/config';
-import { logEvent } from 'firebase/analytics';
 import { pagesConfig } from '@/pages.config';
 
 export default function NavigationTracker() {
@@ -19,7 +17,7 @@ export default function NavigationTracker() {
         }, '*');
     }, [location]);
 
-    // Log user activity when navigating to a page
+    // Log user activity when navigating to a page via GTM dataLayer
     useEffect(() => {
         // Extract page name from pathname
         const pathname = location.pathname;
@@ -40,10 +38,13 @@ export default function NavigationTracker() {
             pageName = matchedKey || null;
         }
 
-        if (isAuthenticated && pageName && analytics) {
-            logEvent(analytics, 'page_view', {
+        // Push to GTM dataLayer
+        if (pageName && window.dataLayer) {
+            window.dataLayer.push({
+                event: 'page_view',
                 page_name: pageName,
-                page_path: pathname
+                page_path: pathname,
+                is_authenticated: isAuthenticated
             });
         }
     }, [location, isAuthenticated, Pages, mainPageKey]);

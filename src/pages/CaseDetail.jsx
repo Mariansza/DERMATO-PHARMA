@@ -50,6 +50,7 @@ export default function CaseDetail() {
   const [loadingPhotos, setLoadingPhotos] = useState(false);
   const [fullscreenPhoto, setFullscreenPhoto] = useState(null);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [isConcluding, setIsConcluding] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -164,6 +165,7 @@ export default function CaseDetail() {
 
     const confirmText = 'Êtes-vous sûr de vouloir conclure ce dossier ? Les documents seront envoyés au patient par email.';
     if (window.confirm(confirmText)) {
+      setIsConcluding(true);
       try {
         let prescriptionUpload = null;
 
@@ -234,6 +236,8 @@ export default function CaseDetail() {
       } catch (error) {
         console.error('Erreur lors de la conclusion:', error);
         alert('Erreur lors de l\'envoi de l\'email. Le dossier n\'a pas été conclu.');
+      } finally {
+        setIsConcluding(false);
       }
     }
   };
@@ -830,12 +834,19 @@ export default function CaseDetail() {
                         )}
                         <Button
                           onClick={handleConcludeCase}
-                          disabled={!reportHtml}
+                          disabled={!reportHtml || isConcluding}
                           className="w-full"
                           style={{ backgroundColor: '#1a3d3d', color: 'white' }}
                           size="lg"
                         >
-                          Conclure et envoyer au patient
+                          {isConcluding ? (
+                            <>
+                              <Clock className="h-4 w-4 mr-2 animate-spin" />
+                              Envoi en cours...
+                            </>
+                          ) : (
+                            'Conclure et envoyer au patient'
+                          )}
                         </Button>
                         <p className="text-xs text-gray-600 text-center mt-2">
                           Les documents seront envoyés par email au patient
@@ -893,6 +904,19 @@ export default function CaseDetail() {
           </div>
         </div>
       </div>
+
+      {/* Overlay de chargement lors de la conclusion */}
+      {isConcluding && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-8 shadow-xl flex flex-col items-center gap-4">
+            <Clock className="h-12 w-12 animate-spin" style={{ color: '#1a3d3d' }} />
+            <div className="text-center">
+              <p className="text-lg font-semibold" style={{ color: '#1a3d3d' }}>Envoi en cours...</p>
+              <p className="text-sm text-gray-600 mt-1">Génération des documents et envoi par email</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal plein écran pour les photos */}
       {fullscreenPhoto && (
