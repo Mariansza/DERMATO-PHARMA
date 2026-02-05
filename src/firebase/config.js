@@ -18,6 +18,6 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 
-// Analytics géré via Google Tag Manager (GTM-57ZD67F3)
+// Analytics géré via Google Tag Manager (GTM-PFJQ9PS)
 
 export default app;
