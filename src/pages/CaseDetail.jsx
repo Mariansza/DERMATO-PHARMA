@@ -145,6 +145,12 @@ export default function CaseDetail() {
   };
 
   const handleConcludeCase = async () => {
+    // Protection contre double-clic
+    if (isConcluding) {
+      console.log('Conclusion déjà en cours, ignoré');
+      return;
+    }
+
     if (!user) {
       alert('Erreur: utilisateur non identifié');
       return;
@@ -152,6 +158,11 @@ export default function CaseDetail() {
 
     if (!reportHtml) {
       alert('Veuillez générer le compte rendu avant de conclure le dossier.');
+      return;
+    }
+
+    if (caseData.status === 'Termine' || caseData.status === 'Terminé') {
+      alert('Ce dossier est déjà conclu.');
       return;
     }
 
@@ -164,9 +175,14 @@ export default function CaseDetail() {
     }
 
     const confirmText = 'Êtes-vous sûr de vouloir conclure ce dossier ? Les documents seront envoyés au patient par email.';
-    if (window.confirm(confirmText)) {
-      setIsConcluding(true);
-      try {
+    if (!window.confirm(confirmText)) {
+      return;
+    }
+
+    // Marquer immédiatement comme en cours pour bloquer les double-clics
+    setIsConcluding(true);
+
+    try {
         let prescriptionUpload = null;
 
         // Générer l'ordonnance seulement si elle existe
@@ -199,11 +215,13 @@ export default function CaseDetail() {
           closed_at: new Date().toISOString(),
           assigned_derm_id: user.id,
           assigned_derm_name: user.full_name || `${user.first_name} ${user.last_name}`,
-          report_url: reportUpload.file_url
+          report_url: reportUpload.file_url,
+          report_content: reportText  // Sauvegarder le contenu du compte rendu
         };
 
         if (prescriptionUpload) {
           updateData.prescription_url = prescriptionUpload.file_url;
+          updateData.prescription_content = prescriptionText;  // Sauvegarder le contenu de l'ordonnance
         }
 
         await updateCase(caseId, updateData);
@@ -239,7 +257,6 @@ export default function CaseDetail() {
       } finally {
         setIsConcluding(false);
       }
-    }
   };
 
   const handleSaveOpinion = () => {
@@ -272,6 +289,9 @@ export default function CaseDetail() {
   };
 
   const generatePrescription = () => {
+    // Protection contre double-clic
+    if (isGeneratingPrescription) return;
+
     if (!prescriptionText.trim() || !doctorInfo.firstName || !doctorInfo.lastName || !doctorInfo.rpps || !doctorInfo.signature) {
       alert('Veuillez remplir tous les champs obligatoires (y compris la signature)');
       return;
@@ -336,6 +356,9 @@ export default function CaseDetail() {
   };
 
   const generateReport = () => {
+    // Protection contre double-clic
+    if (isGeneratingReport) return;
+
     if (!reportText.trim() || !doctorInfo.firstName || !doctorInfo.lastName || !doctorInfo.rpps || !doctorInfo.signature) {
       alert('Veuillez remplir tous les champs obligatoires (y compris la signature)');
       return;
@@ -508,6 +531,8 @@ export default function CaseDetail() {
                         <p className="font-medium">{caseData.pharmacist_name}</p>
                         <p className="text-sm text-gray-600">{caseData.pharmacy_name}</p>
                         <p className="text-sm text-gray-600">{caseData.pharmacy_city}</p>
+                        {caseData.pharmacist_phone && <p className="text-sm text-gray-600">Tél: {caseData.pharmacist_phone}</p>}
+                        {caseData.pharmacist_email && <p className="text-sm text-gray-600">Email: {caseData.pharmacist_email}</p>}
                       </div>
                     </div>
 
@@ -515,8 +540,10 @@ export default function CaseDetail() {
                       <h3 className="font-semibold mb-2">Patient</h3>
                       <div className="bg-gray-50 p-4 rounded-lg">
                         <p><strong>Nom:</strong> {caseData.patient_first_name} {caseData.patient_last_name}</p>
-                        {caseData.patient_ssn && <p><strong>N SS:</strong> {caseData.patient_ssn}</p>}
+                        {caseData.patient_ssn && <p><strong>N° SS:</strong> {caseData.patient_ssn}</p>}
                         {caseData.patient_birthdate && <p><strong>Date de naissance:</strong> {caseData.patient_birthdate}</p>}
+                        {caseData.patient_phone && <p><strong>Tél:</strong> {caseData.patient_phone}</p>}
+                        {caseData.patient_email && <p><strong>Email:</strong> {caseData.patient_email}</p>}
                       </div>
                     </div>
 
@@ -524,8 +551,28 @@ export default function CaseDetail() {
                       <h3 className="font-semibold mb-2">Contexte clinique</h3>
                       <div className="bg-gray-50 p-4 rounded-lg space-y-2">
                         <p><strong>Localisation:</strong> {caseData.anatomical_location}</p>
-                        <p><strong>Durée:</strong> {caseData.duration || 'Non spécifiée'}</p>
-                        <p><strong>Symptômes:</strong> {caseData.symptoms || 'Non spécifiés'}</p>
+                        <p><strong>Durée:</strong> {(() => {
+                          const dureeLabels = {
+                            'moins_1semaine': 'Moins d\'une semaine',
+                            '1_4semaines': '1 à 4 semaines',
+                            '1_6mois': '1 à 6 mois',
+                            'plus_6mois': 'Plus de 6 mois'
+                          };
+                          return dureeLabels[caseData.duration] || caseData.duration || 'Non spécifiée';
+                        })()}</p>
+                        <p><strong>Symptômes:</strong> {(() => {
+                          const symptomeLabels = {
+                            'boutons_lesions': 'Boutons / Lésions',
+                            'rougeurs': 'Rougeurs',
+                            'demangeaisons': 'Démangeaisons',
+                            'secheresse': 'Sécheresse',
+                            'douleur': 'Douleur',
+                            'desquamation': 'Desquamation'
+                          };
+                          if (!caseData.symptoms) return 'Non spécifiés';
+                          const symptoms = caseData.symptoms.split(',').map(s => s.trim());
+                          return symptoms.map(s => symptomeLabels[s] || s).join(', ');
+                        })()}</p>
                       </div>
                     </div>
 
@@ -540,11 +587,42 @@ export default function CaseDetail() {
                               duree_probleme: "Durée du problème",
                               recurrence: "Récurrence",
                               traitement_actuel: "Traitement actuel",
+                              traitement_actuel_detail: "Détail traitement actuel",
                               nouveau_medicament: "Nouveau médicament",
+                              nouveau_medicament_detail: "Détail nouveau médicament",
                               antecedents_derm: "Antécédents dermatologiques",
                               grains_beaute: "Grains de beauté",
                               changements_grains: "Changements grains de beauté",
                               qualite_vie: "Impact qualité de vie"
+                            };
+                            const valueLabels = {
+                              // Durées
+                              'moins_1semaine': 'Moins d\'une semaine',
+                              '1_4semaines': '1 à 4 semaines',
+                              '1_6mois': '1 à 6 mois',
+                              'plus_6mois': 'Plus de 6 mois',
+                              // Oui/Non
+                              'oui': 'Oui',
+                              'non': 'Non',
+                              // Symptômes
+                              'boutons_lesions': 'Boutons / Lésions',
+                              'rougeurs': 'Rougeurs',
+                              'demangeaisons': 'Démangeaisons',
+                              'secheresse': 'Sécheresse',
+                              'douleur': 'Douleur',
+                              'desquamation': 'Desquamation',
+                              // Qualité de vie
+                              'pas_du_tout': 'Pas du tout',
+                              'un_peu': 'Un peu',
+                              'moderement': 'Modérément',
+                              'beaucoup': 'Beaucoup',
+                              'enormement': 'Énormément'
+                            };
+                            const formatValue = (val) => {
+                              if (Array.isArray(val)) {
+                                return val.map(v => valueLabels[v] || v).join(', ');
+                              }
+                              return valueLabels[val] || val;
                             };
                             return (
                               <ul className="text-sm space-y-2">
@@ -553,7 +631,7 @@ export default function CaseDetail() {
                                     <span className="text-gray-600">-</span>
                                     <span>
                                       <strong>{labels[key] || key}:</strong>{' '}
-                                      {Array.isArray(value) ? value.join(', ') : value}
+                                      {formatValue(value)}
                                     </span>
                                   </li>
                                 ))}

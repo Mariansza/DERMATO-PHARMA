@@ -3,7 +3,8 @@
     "allow": [
       "Bash(npm run build:*)",
       "Bash(firebase deploy:*)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "WebSearch"
     ]
   }
 }

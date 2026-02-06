@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { listCases } from '@/firebase/firestore';
+import { listCases, listUsers } from '@/firebase/firestore';
 import { useAuth } from '@/lib/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from "@/components/ui/card";
@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Clock, AlertCircle, Search, Filter, Users, TrendingUp, LogOut, Download } from 'lucide-react';
+import { FileText, Clock, AlertCircle, Search, Filter, Users, TrendingUp, LogOut, Download, Shield } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -36,13 +36,30 @@ export default function Dashboard() {
     enabled: isAuthenticated
   });
 
+  // Récupérer la liste des utilisateurs (pour super_user uniquement)
+  const isSuperUser = user?.role === 'super_user';
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => listUsers(),
+    enabled: isAuthenticated && isSuperUser
+  });
+
+  // Créer un mapping userId -> nom complet pour l'affichage
+  const userNamesMap = useMemo(() => {
+    const map = {};
+    allUsers.forEach(u => {
+      map[u.id] = u.full_name || `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email || 'Inconnu';
+    });
+    return map;
+  }, [allUsers]);
+
   const handleLogout = () => {
     logout(createPageUrl('Home'));
   };
 
   const filteredCases = useMemo(() => {
     return cases.filter(c => {
-      // Filtrer par médecin : voir toutes les demandes non assignées OU les demandes assignées à soi
+      // Tous les utilisateurs : voir les demandes non assignées OU les demandes assignées à soi
       const isAssignedToMe = c.assigned_derm_id === user?.id;
       const isUnassigned = !c.assigned_derm_id || c.assigned_derm_id === '' || c.status === 'En attente';
       const canSeeCase = isUnassigned || isAssignedToMe;
@@ -92,6 +109,12 @@ export default function Dashboard() {
   const myCases = useMemo(() => {
     return cases.filter(c => (c.status === 'Terminé' || c.status === 'Termine') && c.assigned_derm_id === user?.id);
   }, [cases, user]);
+
+  // Tous les dossiers terminés (pour super_user uniquement)
+  const allCompletedCases = useMemo(() => {
+    if (!isSuperUser) return [];
+    return cases.filter(c => c.status === 'Terminé' || c.status === 'Termine');
+  }, [cases, isSuperUser]);
 
   const getStatusColor = (status) => {
     const colors = {
@@ -157,7 +180,15 @@ export default function Dashboard() {
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold mb-2" style={{ color: '#1a3d3d' }}>Dashboard Téléexpertise</h1>
+            <div className="flex items-center gap-3 mb-2">
+              <h1 className="text-3xl font-bold" style={{ color: '#1a3d3d' }}>Dashboard Téléexpertise</h1>
+              {isSuperUser && (
+                <Badge className="bg-purple-100 text-purple-800">
+                  <Shield className="h-3 w-3 mr-1" />
+                  Admin
+                </Badge>
+              )}
+            </div>
             <p className="text-gray-600">Gestion des dossiers dermatologiques - Connecté : {user?.full_name || user?.email}</p>
           </div>
           <Button onClick={handleLogout} variant="outline">
@@ -253,6 +284,9 @@ export default function Dashboard() {
           <TabsList className="mb-6">
             <TabsTrigger value="cases">Tous les Dossiers</TabsTrigger>
             <TabsTrigger value="data">Mes dossiers traités</TabsTrigger>
+            {isSuperUser && (
+              <TabsTrigger value="all-completed">Tous les dossiers traités</TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="cases">
@@ -412,6 +446,102 @@ export default function Dashboard() {
                 )}
               </Card>
             </TabsContent>
+
+          {/* Onglet Super User : Tous les dossiers traités */}
+          {isSuperUser && (
+            <TabsContent value="all-completed">
+              <div className="mb-6">
+                <p className="text-sm text-gray-600">
+                  {allCompletedCases.length} dossier{allCompletedCases.length > 1 ? 's' : ''} terminé{allCompletedCases.length > 1 ? 's' : ''} (tous médecins confondus)
+                </p>
+              </div>
+
+              <Card className="overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Référence</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Patient</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pharmacie</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Médecin</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Clôturé le</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Documents</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {allCompletedCases.map((caseRecord) => (
+                        <tr key={caseRecord.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="font-mono text-sm font-medium" style={{ color: '#1a3d3d' }}>
+                              {caseRecord.public_reference}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            {formatDate(caseRecord.created_date)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            <p>{caseRecord.patient_first_name} {caseRecord.patient_last_name}</p>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            <p>{caseRecord.pharmacy_name}</p>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            <span className="font-medium" style={{ color: '#1a3d3d' }}>
+                              {caseRecord.assigned_derm_id
+                                ? userNamesMap[caseRecord.assigned_derm_id] || 'Médecin inconnu'
+                                : '-'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            {caseRecord.closed_at ? formatDate(caseRecord.closed_at) : '-'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            <div className="flex gap-2">
+                              {caseRecord.prescription_url ? (
+                                <a href={caseRecord.prescription_url} target="_blank" rel="noopener noreferrer">
+                                  <Button size="sm" variant="outline" className="text-xs">
+                                    <Download className="h-3 w-3 mr-1" />
+                                    Ordonnance
+                                  </Button>
+                                </a>
+                              ) : (
+                                <span className="text-xs text-gray-400">-</span>
+                              )}
+                              {caseRecord.report_url ? (
+                                <a href={caseRecord.report_url} target="_blank" rel="noopener noreferrer">
+                                  <Button size="sm" variant="outline" className="text-xs">
+                                    <Download className="h-3 w-3 mr-1" />
+                                    Compte rendu
+                                  </Button>
+                                </a>
+                              ) : (
+                                <span className="text-xs text-gray-400">-</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            <Link to={createPageUrl('CaseDetail') + `?id=${caseRecord.id}`}>
+                              <Button size="sm" variant="outline">Voir</Button>
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {allCompletedCases.length === 0 && (
+                  <div className="text-center py-12">
+                    <FileText className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                    <p className="text-gray-600">Aucun dossier terminé</p>
+                  </div>
+                )}
+              </Card>
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </div>

@@ -37,6 +37,7 @@ export const AuthProvider = ({ children }) => {
             full_name: firebaseUser.displayName || userData?.full_name || '',
             rpps: userData?.rpps || '',
             signature: userData?.signature || '',
+            role: userData?.role || 'dermatologist', // Rôle par défaut : dermatologue
             ...userData
           });
           setIsAuthenticated(true);
@@ -50,7 +51,8 @@ export const AuthProvider = ({ children }) => {
             emailVerified: firebaseUser.emailVerified,
             first_name: firebaseUser.displayName?.split(' ')[0] || '',
             last_name: firebaseUser.displayName?.split(' ').slice(1).join(' ') || '',
-            full_name: firebaseUser.displayName || ''
+            full_name: firebaseUser.displayName || '',
+            role: 'dermatologist' // Rôle par défaut en cas d'erreur
           });
           setIsAuthenticated(true);
         }

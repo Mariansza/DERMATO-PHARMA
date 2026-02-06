@@ -250,6 +250,12 @@ export const updateUser = async (uid, data) => {
   return { id: uid, ...data };
 };
 
+// Liste tous les utilisateurs (requiert le rôle super_user)
+export const listUsers = async () => {
+  const snapshot = await getDocs(collection(db, 'users'));
+  return snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
+};
+
 // ============================================================================
 // QUESTIONNAIRE RESPONSES COLLECTION (Patient Triage B2C)
 // ============================================================================
