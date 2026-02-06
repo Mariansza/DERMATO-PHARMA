@@ -61,7 +61,7 @@ export default function PatientResultStandard() {
               style={{ backgroundColor: '#1a3d3d', color: 'white' }}
             >
               <Calendar className="mr-2 h-5 w-5" />
-              Prendre rendez-vous
+              Téléconsulter
               <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
           </a>

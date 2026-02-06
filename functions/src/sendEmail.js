@@ -48,7 +48,7 @@ function generatePatientReminderEmailHtml(data) {
       <!-- CTA Button -->
       <div style="text-align: center; margin: 32px 0;">
         <a href="https://teleconsultation.tessan.io/" style="display: inline-block; background-color: #1a3d3d; color: white; padding: 14px 32px; border-radius: 30px; text-decoration: none; font-weight: 600; font-size: 16px;">
-          ${isUrgent ? 'Téléconsulter maintenant' : 'Prendre rendez-vous'}
+          ${isUrgent ? 'Téléconsulter maintenant' : 'Téléconsulter'}
         </a>
       </div>
 
