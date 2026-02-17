@@ -161,6 +161,12 @@ export default function CaseDetail() {
       return;
     }
 
+    // Vérifier si l'ordonnance a du texte mais n'a pas été générée
+    if (prescriptionText.trim() && !prescriptionHtml) {
+      alert('Vous avez saisi du texte pour l\'ordonnance mais ne l\'avez pas générée. Veuillez cliquer sur "Générer l\'ordonnance" ou vider le champ si vous ne souhaitez pas inclure d\'ordonnance.');
+      return;
+    }
+
     if (caseData.status === 'Termine' || caseData.status === 'Terminé') {
       alert('Ce dossier est déjà conclu.');
       return;
@@ -910,9 +916,16 @@ export default function CaseDetail() {
                             </p>
                           </div>
                         )}
+                        {prescriptionText.trim() && !prescriptionHtml && (
+                          <div className="mb-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                            <p className="text-sm text-amber-800">
+                              Vous avez saisi du texte pour l'ordonnance mais ne l'avez pas générée. Cliquez sur "Générer l'ordonnance" ou videz le champ.
+                            </p>
+                          </div>
+                        )}
                         <Button
                           onClick={handleConcludeCase}
-                          disabled={!reportHtml || isConcluding}
+                          disabled={!reportHtml || isConcluding || (prescriptionText.trim() && !prescriptionHtml)}
                           className="w-full"
                           style={{ backgroundColor: '#1a3d3d', color: 'white' }}
                           size="lg"

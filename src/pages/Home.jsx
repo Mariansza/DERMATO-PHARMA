@@ -29,7 +29,7 @@ export default function Home() {
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24">
         <div className="text-center max-w-4xl mx-auto">
           <div className="inline-block px-4 py-2 rounded-full text-sm font-semibold mb-6" style={{ backgroundColor: '#f0f5f0', color: '#1a3d3d' }}>
-            Nouveau service pour pharmaciens
+            Nouveau service
           </div>
           <h1 className="text-4xl md:text-6xl font-bold mb-6" style={{ color: '#1a3d3d' }}>
             Téléexpertise Dermatologique
@@ -38,7 +38,7 @@ export default function Home() {
             Un avis dermatologique expert pour vos patients en <strong>4 à 5 jours</strong>
           </p>
           <p className="text-lg text-gray-500 mb-8">
-            Service dédié aux pharmaciens : soumettez un dossier clinique avec photos et recevez un avis structuré d'un dermatologue qualifié.
+            Service dédié aux pharmaciens et médecin : soumettez un dossier clinique avec photos et recevez un avis structuré d'un dermatologue qualifié.
           </p>
           <Link to={createPageUrl('SubmitCase')}>
             <Button size="lg" className="text-lg px-8 py-6 rounded-full shadow-lg hover:shadow-xl transition-all" style={{ backgroundColor: '#1a3d3d', color: 'white' }}>
